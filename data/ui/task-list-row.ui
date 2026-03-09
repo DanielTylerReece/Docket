@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface domain="org.gnome.shell.extensions.task-widget">
+  <requires lib="gtk" version="4.0"/>
+  <menu id="optionsMenu">
+    <item>
+      <attribute name='label' translatable='yes'>Move Up</attribute>
+      <attribute name='action'>options-menu.up</attribute>
+    </item>
+    <item>
+      <attribute name='label' translatable='yes'>Move Down</attribute>
+      <attribute name='action'>options-menu.down</attribute>
+    </item>
+  </menu>
+  <template class="TaskListRow" parent="AdwActionRow">
+    <property name="title">Task List Name</property>
+    <property name="activatable-widget">taskListSwitch</property>
+    <child>
+      <object class="GtkEventControllerMotion">
+        <signal name="enter" handler="_onMotionEvent"/>
+        <signal name="leave" handler="_onMotionEvent"/>
+      </object>
+    </child>
+    <child>
+      <object class="GtkDragSource">
+        <property name="actions">move</property>
+        <signal name="prepare" handler="_dragPrepare"/>
+        <signal name="drag-end" handler="_dragEnd"/>
+      </object>
+    </child>
+    <child>
+      <object class="GtkDropTarget">
+        <property name="actions">move</property>
+        <property name="formats">TaskListRow</property>
+        <signal name="drop" handler="_dragDrop"/>
+      </object>
+    </child>
+    <child type="prefix">
+      <object class="GtkImage">
+        <property name="icon-name">list-drag-handle-symbolic</property>
+      </object>
+    </child>
+    <child type="suffix">
+      <object class="GtkLabel" id="taskListProvider">
+        <property name="label">Task List Provider</property>
+          <style>
+            <class name="dim-label"/>
+          </style>
+      </object>
+    </child>
+    <child type="suffix">
+      <object class="GtkSeparator">
+        <property name="margin-top">12</property>
+        <property name="margin-bottom">12</property>
+      </object>
+    </child>
+    <child type="suffix">
+      <object class="GtkMenuButton" id="taskListOptionsButton">
+        <property name="focus-on-click">0</property>
+        <property name="menu-model">optionsMenu</property>
+        <property name="icon-name">view-more-symbolic</property>
+        <property name="has-frame">0</property>
+        <property name="halign">center</property>
+        <property name="valign">center</property>
+        <accessibility>
+          <property name="label" translatable="yes">Task list options</property>
+        </accessibility>
+        <child>
+          <object class="GtkEventControllerMotion">
+            <signal name="enter" handler="_onMotionEvent"/>
+            <signal name="leave" handler="_onMotionEvent"/>
+          </object>
+        </child>
+      </object>
+    </child>
+    <child type="suffix">
+      <object class="GtkButton" id="taskListOptionsSpinner">
+        <property name="visible">0</property>
+        <property name="sensitive">0</property>
+        <property name="has-frame">0</property>
+        <property name="halign">center</property>
+        <property name="valign">center</property>
+        <property name="icon-name">content-loading-symbolic</property>
+        <accessibility>
+          <property name="label" translatable="yes">Refresh in progress</property>
+        </accessibility>
+      </object>
+    </child>
+    <child type="suffix">
+      <object class="GtkSeparator">
+        <property name="margin-top">12</property>
+        <property name="margin-bottom">12</property>
+      </object>
+    </child>
+    <child type="suffix">
+      <object class="GtkSwitch" id="taskListSwitch">
+        <property name="valign">center</property>
+        <signal name="state-set" handler="_setTaskListState"/>
+        <child>
+          <object class="GtkEventControllerMotion">
+            <signal name="enter" handler="_onMotionEvent"/>
+            <signal name="leave" handler="_onMotionEvent"/>
+          </object>
+        </child>
+      </object>
+    </child>
+  </template>
+</interface>

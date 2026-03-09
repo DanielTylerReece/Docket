@@ -1,0 +1,345 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: task-widget\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2024-09-30 16:45+0200\n"
+"PO-Revision-Date: 2024-09-30 14:49\n"
+"Last-Translator: \n"
+"Language-Team: Portuguese, Brazilian\n"
+"Language: pt_BR\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"X-Crowdin-Project: task-widget\n"
+"X-Crowdin-Project-ID: 418358\n"
+"X-Crowdin-Language: pt-BR\n"
+"X-Crowdin-File: /master/data/po/org.gnome.shell.extensions.task-widget.pot\n"
+"X-Crowdin-File-ID: 8\n"
+
+#. Translators: without the ellipsis as it's appended
+#. automatically.
+#: src/extension.js:124
+msgid "Loading"
+msgstr "Carregando"
+
+#: src/extension.js:270
+msgid "Previous task list"
+msgstr "Lista de tarefas anterior"
+
+#: src/extension.js:306
+msgid "Select task list"
+msgstr "Selecione uma lista de tarefas"
+
+#: src/extension.js:341
+msgid "Next task list"
+msgstr "Próxima lista de tarefas"
+
+#: src/extension.js:402 src/extension.js:1678
+msgid "All Tasks"
+msgstr "Todas as tarefas"
+
+#. Translators: this denotes a subtask with an inaccessible
+#. parent task.
+#: src/extension.js:1001
+msgid "Orphan task"
+msgstr "Tarefa órfã"
+
+#: src/extension.js:1021
+msgid "Beginning of a subtask list"
+msgstr "Início de uma lista de subtarefas"
+
+#: src/extension.js:1087
+msgid "No due date"
+msgstr "Sem prazo"
+
+#: src/extension.js:1089
+msgid "Today"
+msgstr "Hoje"
+
+#. Translators: this is a category name for tasks with
+#. due date in the past.
+#: src/extension.js:1097 data/ui/settings-window.ui:92
+msgid "Past"
+msgstr "Anteriores"
+
+#. Translators: %A is the weekday name (e.g. Friday)
+#. %B is the name of the month (e.g. February)
+#. %-d is the day of the month, a decimal number ("-"
+#. before "d" disables padding with zeros (e.g. prints "2"
+#. instead of "02")
+#. %Y is the year as a decimal number including the
+#. century (e.g. 2021)
+#.
+#. So, "%A, %B %-d" in English translates to e.g. "Friday,
+#. February 2".
+#.
+#. The idea is of course to adjust these placeholders
+#. according to the format used in your language.
+#: src/extension.js:1116
+msgctxt "task due date"
+msgid "%A, %B %-d"
+msgstr "%-d de %B, %A"
+
+#: src/extension.js:1117
+msgctxt "task due date with a year"
+msgid "%A, %B %-d, %Y"
+msgstr "%-d de %B de %Y, %A"
+
+#: src/extension.js:1720
+msgid "No Tasks"
+msgstr "Sem tarefas"
+
+#: src/extension.js:1728 src/prefs.js:100
+msgid "Error: Missing Dependencies"
+msgstr "Erro: dependências faltantes"
+
+#: src/prefs.js:102
+msgid "Please install Evolution Data Server to use this extension."
+msgstr "Por favor instale o Servidor de Dados do Evolution para usar esta extensão."
+
+#: src/prefs.js:107 data/ui/settings-menu.ui:25
+msgid "Help"
+msgstr "Ajuda"
+
+#: src/prefs.js:359
+msgctxt "after X second(s)"
+msgid "second"
+msgid_plural "seconds"
+msgstr[0] "segundo"
+msgstr[1] "segundos"
+
+#: src/prefs.js:368
+msgctxt "after X minute(s)"
+msgid "minute"
+msgid_plural "minutes"
+msgstr[0] "minuto"
+msgstr[1] "minutos"
+
+#: src/prefs.js:375
+msgctxt "after X hour(s)"
+msgid "hour"
+msgid_plural "hours"
+msgstr[0] "hora"
+msgstr[1] "horas"
+
+#: src/prefs.js:379
+msgctxt "after X day(s)"
+msgid "day"
+msgid_plural "days"
+msgstr[0] "dia"
+msgstr[1] "dias"
+
+#: src/prefs.js:434
+msgid "No remote task lists found"
+msgstr "Nenhuma lista de tarefas remota encontrada"
+
+#: src/prefs.js:438 data/ui/settings-window.ui:296
+msgid "Refresh the list of account task lists"
+msgstr "Atualizar a lista de listas de tarefas da conta"
+
+#: src/prefs.js:560 data/ui/settings-window.ui:308 data/ui/task-list-row.ui:84
+msgid "Refresh in progress"
+msgstr "Atualização em progresso"
+
+#: src/prefs.js:753
+msgid "Refresh Tasks"
+msgstr "Atualizar tarefas"
+
+#: src/prefs.js:761
+msgid "Properties"
+msgstr "Propriedades"
+
+#: src/prefs.js:988
+msgctxt "refresh every X minutes(s)"
+msgid "minute"
+msgid_plural "minutes"
+msgstr[0] "minuto"
+msgstr[1] "minutos"
+
+#: src/prefs.js:997
+msgctxt "refresh every X hour(s)"
+msgid "hour"
+msgid_plural "hours"
+msgstr[0] "hora"
+msgstr[1] "horas"
+
+#: src/prefs.js:1006
+msgctxt "refresh every X day(s)"
+msgid "day"
+msgid_plural "days"
+msgstr[0] "dia"
+msgstr[1] "dias"
+
+#. Translators: put down your name/nickname and email (optional)
+#. according to the format below. This will credit you in the "About"
+#. window of the extension settings.
+#: src/prefs.js:1080
+msgctxt "translator name <email>"
+msgid "translator-credits"
+msgstr "Cap <caapppp@outlook.com>\n"
+"Filipe Motta <luizfilipemotta@gmail.com>"
+
+#: data/ui/settings-menu.ui:7 data/ui/settings-menu.ui:37
+msgid "Support Log"
+msgstr "Log de suporte"
+
+#: data/ui/settings-menu.ui:15
+msgid "About"
+msgstr "Sobre"
+
+#: data/ui/settings-menu.ui:31
+msgid "Copyright © 2020-2023 Juozas Miškinis"
+msgstr "Copyright © 2020-2023 Juozas Miškinis"
+
+#: data/ui/settings-menu.ui:38
+msgid "Debug messages are being logged. Take any steps necessary to reproduce a problem, then review the log. You should remove or censor any information you consider private."
+msgstr "Mensagens de depuração estão sendo registradas. Realize os passos necessários para reproduzir um problema, e então revise o log. Você deve remover ou censurar qualquer informação que considere privada."
+
+#: data/ui/settings-menu.ui:41 data/ui/task-list-properties-dialog.ui:21
+msgid "Cancel"
+msgstr "Cancelar"
+
+#: data/ui/settings-menu.ui:46
+msgid "Review Log"
+msgstr "Revisar log"
+
+#: data/ui/settings-window.ui:24
+msgid "Settings"
+msgstr "Configurações"
+
+#: data/ui/settings-window.ui:27
+msgid "Merge task lists"
+msgstr "Mesclar listas de tarefas"
+
+#: data/ui/settings-window.ui:38
+msgid "Group past tasks"
+msgstr "Agrupar tarefas anteriores"
+
+#: data/ui/settings-window.ui:49
+msgid "Hide header for singular task lists"
+msgstr "Ocultar cabeçalho para lista única de tarefas"
+
+#: data/ui/settings-window.ui:60
+msgid "Hide empty and completed task lists"
+msgstr "Ocultar listas de tarefas vazias e concluídas"
+
+#: data/ui/settings-window.ui:71
+msgid "Show only selected task categories"
+msgstr "Mostrar apenas as categorias de tarefa selecionadas"
+
+#: data/ui/settings-window.ui:93
+msgid "Tasks that were due yesterday or earlier"
+msgstr "Tarefas que eram para ontem ou antes"
+
+#: data/ui/settings-window.ui:101
+msgid "Due Today"
+msgstr "Para hoje"
+
+#: data/ui/settings-window.ui:109
+msgid "Due Tomorrow"
+msgstr "Para amanhã"
+
+#: data/ui/settings-window.ui:122
+msgid "Due in the Next 7 Days"
+msgstr "Para os próximos 7 dias"
+
+#: data/ui/settings-window.ui:123
+msgid "Tasks that are due in the next seven days including today"
+msgstr "Tarefas que são para os próximos sete dias, incluindo hoje"
+
+#: data/ui/settings-window.ui:131
+msgctxt "used in Scheduled Tasks"
+msgid "Scheduled"
+msgstr "Agendadas"
+
+#: data/ui/settings-window.ui:132
+msgid "Tasks that have a due date"
+msgstr "Tarefas com prazo determinado"
+
+#: data/ui/settings-window.ui:140
+msgctxt "used in Unscheduled Tasks"
+msgid "Unscheduled"
+msgstr "Não agendadas"
+
+#: data/ui/settings-window.ui:141
+msgid "Tasks that have no due date"
+msgstr "Tarefas sem prazo determinado"
+
+#: data/ui/settings-window.ui:154
+msgctxt "used in Started Tasks"
+msgid "Started"
+msgstr "Iniciadas"
+
+#: data/ui/settings-window.ui:155
+msgid "Tasks that either do not have a start date or the start date is earlier than current time"
+msgstr "Tarefas sem data de início ou cuja data de início é anterior ao horário atual"
+
+#: data/ui/settings-window.ui:163
+msgctxt "used in Not Cancelled Tasks"
+msgid "Not Cancelled"
+msgstr "Não canceladas"
+
+#: data/ui/settings-window.ui:175
+msgid "Hide completed tasks"
+msgstr "Ocultar tarefas concluídas"
+
+#: data/ui/settings-window.ui:181
+msgid "Never"
+msgstr "Nunca"
+
+#: data/ui/settings-window.ui:182
+msgid "Immediately"
+msgstr "Imediatamente"
+
+#: data/ui/settings-window.ui:183
+msgid "After a period of time after completion"
+msgstr "Após um período de tempo depois da conclusão"
+
+#: data/ui/settings-window.ui:184
+msgid "After a specific time of the day"
+msgstr "Após uma hora específica do dia"
+
+#: data/ui/settings-window.ui:205
+msgctxt "e.g. After 5 minutes"
+msgid "After"
+msgstr "Depois de"
+
+#: data/ui/settings-window.ui:236
+msgctxt "e.g. After 9:00"
+msgid "After"
+msgstr "Depois de"
+
+#: data/ui/settings-window.ui:270
+msgid "Task Lists"
+msgstr "Listas de Tarefas"
+
+#: data/ui/settings-window.ui:271
+msgid "You can drag and drop rows to change the order of task lists in the widget."
+msgstr "Você pode arrastar e soltar as linhas para alterar a ordem das listas de tarefas no widget."
+
+#: data/ui/task-list-properties-dialog.ui:12
+msgid "Task List Properties"
+msgstr "Propriedades da Lista de Tarefas"
+
+#: data/ui/task-list-properties-dialog.ui:26
+msgid "OK"
+msgstr "OK"
+
+#. Translators: e.g. "Refresh every 10 minutes".
+#: data/ui/task-list-properties-dialog.ui:40
+msgid "Refresh every"
+msgstr "Atuaizar a cada"
+
+#: data/ui/task-list-row.ui:6
+msgid "Move Up"
+msgstr "Mover para cima"
+
+#: data/ui/task-list-row.ui:10
+msgid "Move Down"
+msgstr "Mover para baixo"
+
+#: data/ui/task-list-row.ui:65
+msgid "Task list options"
+msgstr "Opções da lista de tarefas"
+

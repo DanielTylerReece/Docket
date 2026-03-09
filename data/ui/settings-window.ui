@@ -1,0 +1,317 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface domain="org.gnome.shell.extensions.task-widget">
+  <requires lib="gtk" version="4.0"/>
+  <object class="GtkAdjustment" id="hctApotacAdjustment">
+    <property name="lower">1</property>
+    <property name="upper">999</property>
+    <property name="step-increment">1</property>
+  </object>
+  <object class="GtkAdjustment" id="hctAstodHourAdjustment">
+    <property name="upper">23</property>
+    <property name="step-increment">1</property>
+  </object>
+  <object class="GtkAdjustment" id="hctAstodMinuteAdjustment">
+    <property name="upper">59</property>
+    <property name="step-increment">1</property>
+  </object>
+  <template class="TaskWidgetSettings" parent="AdwPreferencesPage">
+    <property name="name">task-widget-settings</property>
+    <property name="title">Task Widget Settings</property>
+    <signal name="realize" handler="_onRealized"/>
+    <signal name="unrealize" handler="_onUnrealized"/>
+    <child>
+      <object class="AdwPreferencesGroup" id="mainSettingsGroup">
+        <property name="title" translatable="yes">Settings</property>
+        <child>
+          <object class="AdwActionRow">
+            <property name="title" translatable="yes">Merge task lists</property>
+            <property name="activatable-widget">mtlSwitch</property>
+            <child>
+              <object class="GtkSwitch" id="mtlSwitch">
+                <property name="valign">center</property>
+              </object>
+            </child>
+          </object>
+        </child>
+        <child>
+          <object class="AdwActionRow">
+            <property name="title" translatable="yes">Group past tasks</property>
+            <property name="activatable-widget">gptSwitch</property>
+            <child>
+              <object class="GtkSwitch" id="gptSwitch">
+                <property name="valign">center</property>
+              </object>
+            </child>
+          </object>
+        </child>
+        <child>
+          <object class="AdwActionRow">
+            <property name="title" translatable="yes">Hide header for singular task lists</property>
+            <property name="activatable-widget">hhfstlSwitch</property>
+            <child>
+              <object class="GtkSwitch" id="hhfstlSwitch">
+                <property name="valign">center</property>
+              </object>
+            </child>
+          </object>
+        </child>
+        <child>
+          <object class="AdwActionRow">
+            <property name="title" translatable="yes">Hide empty and completed task lists</property>
+            <property name="activatable-widget">heactlSwitch</property>
+            <child>
+              <object class="GtkSwitch" id="heactlSwitch">
+                <property name="valign">center</property>
+              </object>
+            </child>
+          </object>
+        </child>
+        <child>
+          <object class="AdwExpanderRow" id="socRow">
+            <property name="title" translatable="yes">Show only selected task categories</property>
+            <property name="expanded" bind-source="socSwitch" bind-property="active" bind-flags="bidirectional"/>
+            <child type="action">
+              <object class="GtkSwitch" id="socSwitch">
+                <property name="valign">center</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkGrid">
+                <property name="margin-start">12</property>
+                <property name="margin-end">12</property>
+                <property name="margin-top">10</property>
+                <property name="margin-bottom">10</property>
+                <property name="column-spacing">12</property>
+                <child>
+                  <object class="GtkBox">
+                    <property name="orientation">vertical</property>
+                    <child>
+                      <object class="GtkCheckButton" id="taskCategoryPast">
+                        <property name="name">past</property>
+                        <property name="hexpand">1</property>
+                        <property name="label" translatable="yes">Past</property>
+                        <property name="tooltip-text" translatable="yes">Tasks that were due yesterday or earlier</property>
+                        <signal name="toggled" handler="_toggleTaskCategory"/>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkCheckButton" id="taskCategoryToday">
+                        <property name="name">today</property>
+                        <property name="hexpand">1</property>
+                        <property name="label" translatable="yes">Due Today</property>
+                        <signal name="toggled" handler="_toggleTaskCategory"/>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkCheckButton" id="taskCategoryTomorrow">
+                        <property name="name">tomorrow</property>
+                        <property name="hexpand">1</property>
+                        <property name="label" translatable="yes">Due Tomorrow</property>
+                        <signal name="toggled" handler="_toggleTaskCategory"/>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkBox">
+                    <property name="orientation">vertical</property>
+                    <child>
+                      <object class="GtkCheckButton" id="taskCategoryNextSevenDays">
+                        <property name="name">next-seven-days</property>
+                        <property name="hexpand">1</property>
+                        <property name="label" translatable="yes">Due in the Next 7 Days</property>
+                        <property name="tooltip-text" translatable="yes">Tasks that are due in the next seven days including today</property>
+                        <signal name="toggled" handler="_toggleTaskCategory"/>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkCheckButton" id="taskCategoryScheduled">
+                        <property name="name">scheduled</property>
+                        <property name="hexpand">1</property>
+                        <property name="label" translatable="yes" context="used in Scheduled Tasks">Scheduled</property>
+                        <property name="tooltip-text" translatable="yes">Tasks that have a due date</property>
+                        <signal name="toggled" handler="_toggleTaskCategory"/>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkCheckButton" id="taskCategoryUnscheduled">
+                        <property name="name">unscheduled</property>
+                        <property name="hexpand">1</property>
+                        <property name="label" translatable="yes" context="used in Unscheduled Tasks">Unscheduled</property>
+                        <property name="tooltip-text" translatable="yes">Tasks that have no due date</property>
+                        <signal name="toggled" handler="_toggleTaskCategory"/>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkBox">
+                    <property name="orientation">vertical</property>
+                    <child>
+                      <object class="GtkCheckButton" id="taskCategoryStarted">
+                        <property name="name">started</property>
+                        <property name="hexpand">1</property>
+                        <property name="label" translatable="yes" context="used in Started Tasks">Started</property>
+                        <property name="tooltip-text" translatable="yes">Tasks that either do not have a start date or the start date is earlier than current time</property>
+                        <signal name="toggled" handler="_toggleTaskCategory"/>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkCheckButton" id="taskCategoryNotCancelled">
+                        <property name="name">not-cancelled</property>
+                        <property name="hexpand">1</property>
+                        <property name="label" translatable="yes" context="used in Not Cancelled Tasks">Not Cancelled</property>
+                        <signal name="toggled" handler="_toggleTaskCategory"/>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+              </object>
+            </child>
+          </object>
+        </child>
+        <child>
+          <object class="AdwExpanderRow" id="hctRow">
+            <property name="title" translatable="yes">Hide completed tasks</property>
+            <property name="enable-expansion">0</property>
+            <child type="action">
+              <object class="GtkComboBoxText" id="hctComboBox">
+                <property name="valign">center</property>
+                <items>
+                  <item id="0" translatable="yes">Never</item>
+                  <item id="1" translatable="yes">Immediately</item>
+                  <item id="2" translatable="yes">After a period of time after completion</item>
+                  <item id="3" translatable="yes">After a specific time of the day</item>
+                </items>
+                <property name="active">0</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkStack" id="hctSettingsStack">
+                <property name="transition-type">crossfade</property>
+                <child>
+                  <object class="GtkStackPage">
+                    <property name="name">hctApotacPage</property>
+                    <property name="child">
+                      <object class="GtkGrid" id="hctApotacPage">
+                        <property name="halign">end</property>
+                        <property name="margin-start">12</property>
+                        <property name="margin-end">12</property>
+                        <property name="margin-top">10</property>
+                        <property name="margin-bottom">10</property>
+                        <property name="column-spacing">12</property>
+                        <child>
+                          <object class="GtkLabel">
+                            <property name="label" translatable="yes" context="e.g. After 5 minutes">After</property>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="GtkSpinButton" id="hctApotacSpinButton">
+                            <property name="adjustment">hctApotacAdjustment</property>
+                            <property name="numeric">1</property>
+                            <signal name="value-changed" handler="_fillApotacComboBox"/>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="GtkComboBoxText" id="hctApotacComboBox">
+                          </object>
+                        </child>
+                      </object>
+                    </property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkStackPage">
+                    <property name="name">hctAstodPage</property>
+                    <property name="child">
+                      <object class="GtkGrid">
+                        <property name="halign">end</property>
+                        <property name="margin-start">12</property>
+                        <property name="margin-end">12</property>
+                        <property name="margin-top">10</property>
+                        <property name="margin-bottom">10</property>
+                        <property name="column-spacing">12</property>
+                        <child>
+                          <object class="GtkLabel">
+                            <property name="label" translatable="yes" context="e.g. After 9:00">After</property>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="GtkSpinButton" id="hctAstodSpinButtonHour">
+                            <property name="adjustment">hctAstodHourAdjustment</property>
+                            <property name="numeric">1</property>
+                            <signal name="output" handler="_timeOutput"/>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="GtkLabel">
+                            <property name="label">:</property>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="GtkSpinButton" id="hctAstodSpinButtonMinute">
+                            <property name="adjustment">hctAstodMinuteAdjustment</property>
+                            <property name="numeric">1</property>
+                            <signal name="output" handler="_timeOutput"/>
+                          </object>
+                        </child>
+                      </object>
+                    </property>
+                  </object>
+                </child>
+              </object>
+            </child>
+          </object>
+        </child>
+      </object>
+    </child>
+    <child>
+      <object class="AdwPreferencesGroup" id="taskListRows">
+        <property name="title" translatable="yes">Task Lists</property>
+        <property name="description" translatable="yes">You can drag and drop rows to change the order of task lists in the widget.</property>
+        <child>
+          <object class="GtkListBox" id="taskListBox">
+            <property name="selection-mode">0</property>
+            <style>
+              <class name="boxed-list"/>
+            </style>
+            <accessibility>
+              <relation name="labelled-by">taskListRows</relation>
+            </accessibility>
+          </object>
+        </child>
+        <property name="header-suffix">
+          <object class="GtkBox">
+            <property name="spacing">12</property>
+            <child>
+              <object class="GtkSeparator"/>
+            </child>
+            <child>
+              <object class="GtkMenuButton" id="backendRefreshButton">
+                <property name="focus-on-click">0</property>
+                <property name="halign">center</property>
+                <property name="valign">center</property>
+                <property name="icon-name">view-refresh-symbolic</property>
+                <accessibility>
+                  <property name="label" translatable="yes">Refresh the list of account task lists</property>
+                </accessibility>
+              </object>
+            </child>
+            <child>
+              <object class="GtkButton" id="backendRefreshButtonSpinner">
+                <property name="visible">0</property>
+                <property name="sensitive">0</property>
+                <property name="halign">center</property>
+                <property name="valign">center</property>
+                <property name="icon-name">content-loading-symbolic</property>
+                <accessibility>
+                  <property name="label" translatable="yes">Refresh in progress</property>
+                </accessibility>
+              </object>
+            </child>
+          </object>
+        </property>
+      </object>
+    </child>
+  </template>
+</interface>

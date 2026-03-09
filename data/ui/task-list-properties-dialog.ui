@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface domain="org.gnome.shell.extensions.task-widget">
+  <requires lib="gtk" version="4.0"/>
+  <object class="GtkAdjustment" id="RefreshTaskListAdjustment">
+    <property name="lower">1</property>
+    <property name="upper">999</property>
+    <property name="step-increment">1</property>
+  </object>
+  <template class="TaskListPropertiesDialog" parent="GtkDialog">
+    <property name="resizable">0</property>
+    <property name="modal">1</property>
+    <property name="title" translatable="yes">Task List Properties</property>
+    <child internal-child="action_area">
+      <object class="GtkBox">
+        <property name="margin-end">12</property>
+        <property name="margin-top">12</property>
+        <property name="margin-bottom">12</property>
+        <property name="orientation">horizontal</property>
+        <child type="action">
+          <object class="GtkButton" id="cancelDialog">
+            <property name="label" translatable="yes">Cancel</property>
+          </object>
+        </child>
+        <child type="action">
+          <object class="GtkButton" id="submitDialog">
+            <property name="label" translatable="yes">OK</property>
+          </object>
+        </child>
+      </object>
+    </child>
+    <child internal-child="content_area">
+      <object class="GtkBox">
+        <property name="margin-start">18</property>
+        <property name="margin-end">18</property>
+        <property name="margin-top">18</property>
+        <property name="spacing">12</property>
+        <property name="orientation">horizontal</property>
+        <child>
+          <object class="GtkLabel">
+            <property name="label" translatable="yes" comments="Translators: e.g. &quot;Refresh every 10 minutes&quot;.">Refresh every</property>
+          </object>
+        </child>
+        <child>
+          <object class="GtkSpinButton" id="taskListPropertiesDialogSpinButton">
+            <property name="adjustment">RefreshTaskListAdjustment</property>
+            <signal name="value-changed" handler="_fillTimeUnitComboBox"/>
+          </object>
+        </child>
+        <child>
+          <object class="GtkComboBoxText" id="taskListPropertiesDialogComboBox">
+            <property name="hexpand">1</property>
+          </object>
+        </child>
+      </object>
+    </child>
+    <action-widgets>
+      <action-widget response="cancel">cancelDialog</action-widget>
+      <action-widget response="ok" default="true">submitDialog</action-widget>
+    </action-widgets>
+  </template>
+</interface>

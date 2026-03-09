@@ -1,0 +1,29 @@
+rules:
+  prefer-const: error
+  prefer-destructuring: error
+  max-len:
+    - error
+    - code: 80
+
+overrides:
+  - files: src/*.js
+    rules:
+      prefer-template: off
+      indent:
+        - error
+        - 4
+        - ignoredNodes:
+            # Allow not indenting the body of GObject.registerClass, since in the
+            # future it's intended to be a decorator
+            - 'CallExpression[callee.object.name=GObject][callee.property.name=registerClass] > ClassExpression:first-child'
+          # Allow dedenting chained member expressions
+          MemberExpression: 'off'
+          SwitchCase: 1
+      no-unused-vars:
+        - error
+        # Vars use a suffix _ instead of a prefix because of file-scope private vars
+        - varsIgnorePattern: (^unused|_|Me$)
+          argsIgnorePattern: ^(unused|_)
+  - files: src/extension.js
+    globals:
+      global: readonly

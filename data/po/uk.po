@@ -1,0 +1,358 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: task-widget\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2024-09-30 16:45+0200\n"
+"PO-Revision-Date: 2024-09-30 14:48\n"
+"Last-Translator: \n"
+"Language-Team: Ukrainian\n"
+"Language: uk_UA\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=4; plural=((n%10==1 && n%100!=11) ? 0 : ((n%10 >= 2 && n%10 <=4 && (n%100 < 12 || n%100 > 14)) ? 1 : ((n%10 == 0 || (n%10 >= 5 && n%10 <=9)) || (n%100 >= 11 && n%100 <= 14)) ? 2 : 3));\n"
+"X-Crowdin-Project: task-widget\n"
+"X-Crowdin-Project-ID: 418358\n"
+"X-Crowdin-Language: uk\n"
+"X-Crowdin-File: /master/data/po/org.gnome.shell.extensions.task-widget.pot\n"
+"X-Crowdin-File-ID: 8\n"
+
+#. Translators: without the ellipsis as it's appended
+#. automatically.
+#: src/extension.js:124
+msgid "Loading"
+msgstr "Завантаження"
+
+#: src/extension.js:270
+msgid "Previous task list"
+msgstr "Попередній список завдань"
+
+#: src/extension.js:306
+msgid "Select task list"
+msgstr "Вибір списку завдань"
+
+#: src/extension.js:341
+msgid "Next task list"
+msgstr "Наступний список завдань"
+
+#: src/extension.js:402 src/extension.js:1678
+msgid "All Tasks"
+msgstr "Усі завдання"
+
+#. Translators: this denotes a subtask with an inaccessible
+#. parent task.
+#: src/extension.js:1001
+msgid "Orphan task"
+msgstr "Загублене завдання"
+
+#: src/extension.js:1021
+msgid "Beginning of a subtask list"
+msgstr "Початок списку підзавдань"
+
+#: src/extension.js:1087
+msgid "No due date"
+msgstr "Без терміну"
+
+#: src/extension.js:1089
+msgid "Today"
+msgstr "Сьогодні"
+
+#. Translators: this is a category name for tasks with
+#. due date in the past.
+#: src/extension.js:1097 data/ui/settings-window.ui:92
+msgid "Past"
+msgstr "Минулі"
+
+#. Translators: %A is the weekday name (e.g. Friday)
+#. %B is the name of the month (e.g. February)
+#. %-d is the day of the month, a decimal number ("-"
+#. before "d" disables padding with zeros (e.g. prints "2"
+#. instead of "02")
+#. %Y is the year as a decimal number including the
+#. century (e.g. 2021)
+#.
+#. So, "%A, %B %-d" in English translates to e.g. "Friday,
+#. February 2".
+#.
+#. The idea is of course to adjust these placeholders
+#. according to the format used in your language.
+#: src/extension.js:1116
+msgctxt "task due date"
+msgid "%A, %B %-d"
+msgstr "%A, %-d %B"
+
+#: src/extension.js:1117
+msgctxt "task due date with a year"
+msgid "%A, %B %-d, %Y"
+msgstr "%A, %-d %B, %Y р."
+
+#: src/extension.js:1720
+msgid "No Tasks"
+msgstr "Завдань немає"
+
+#: src/extension.js:1728 src/prefs.js:100
+msgid "Error: Missing Dependencies"
+msgstr "Помилка: треба задовольнити залежності"
+
+#: src/prefs.js:102
+msgid "Please install Evolution Data Server to use this extension."
+msgstr "Для цього додатка потрібен Evolution Data Server."
+
+#: src/prefs.js:107 data/ui/settings-menu.ui:25
+msgid "Help"
+msgstr "Довідка"
+
+#: src/prefs.js:359
+msgctxt "after X second(s)"
+msgid "second"
+msgid_plural "seconds"
+msgstr[0] "секунду"
+msgstr[1] "секунди"
+msgstr[2] "секунд"
+msgstr[3] "секунди"
+
+#: src/prefs.js:368
+msgctxt "after X minute(s)"
+msgid "minute"
+msgid_plural "minutes"
+msgstr[0] "хвилину"
+msgstr[1] "хвилини"
+msgstr[2] "хвилин"
+msgstr[3] "хвилини"
+
+#: src/prefs.js:375
+msgctxt "after X hour(s)"
+msgid "hour"
+msgid_plural "hours"
+msgstr[0] "годину"
+msgstr[1] "години"
+msgstr[2] "годин"
+msgstr[3] "години"
+
+#: src/prefs.js:379
+msgctxt "after X day(s)"
+msgid "day"
+msgid_plural "days"
+msgstr[0] "добу"
+msgstr[1] "доби"
+msgstr[2] "діб"
+msgstr[3] "доби"
+
+#: src/prefs.js:434
+msgid "No remote task lists found"
+msgstr "Не вдалося знайти зовнішні списки завдань"
+
+#: src/prefs.js:438 data/ui/settings-window.ui:296
+msgid "Refresh the list of account task lists"
+msgstr "Оновити перелік списків завдань з облікового запису"
+
+#: src/prefs.js:560 data/ui/settings-window.ui:308 data/ui/task-list-row.ui:84
+msgid "Refresh in progress"
+msgstr "Оновлення..."
+
+#: src/prefs.js:753
+msgid "Refresh Tasks"
+msgstr "Оновити завдання"
+
+#: src/prefs.js:761
+msgid "Properties"
+msgstr "Властивості"
+
+#: src/prefs.js:988
+msgctxt "refresh every X minutes(s)"
+msgid "minute"
+msgid_plural "minutes"
+msgstr[0] "хвилину"
+msgstr[1] "хвилини"
+msgstr[2] "хвилин"
+msgstr[3] "хвилилин"
+
+#: src/prefs.js:997
+msgctxt "refresh every X hour(s)"
+msgid "hour"
+msgid_plural "hours"
+msgstr[0] "годину"
+msgstr[1] "години"
+msgstr[2] "годин"
+msgstr[3] "години"
+
+#: src/prefs.js:1006
+msgctxt "refresh every X day(s)"
+msgid "day"
+msgid_plural "days"
+msgstr[0] "добу"
+msgstr[1] "доби"
+msgstr[2] "діб"
+msgstr[3] "доби"
+
+#. Translators: put down your name/nickname and email (optional)
+#. according to the format below. This will credit you in the "About"
+#. window of the extension settings.
+#: src/prefs.js:1080
+msgctxt "translator name <email>"
+msgid "translator-credits"
+msgstr "Андрій «archdron» Сербовець <serbovets.translation@gmail.com>"
+
+#: data/ui/settings-menu.ui:7 data/ui/settings-menu.ui:37
+msgid "Support Log"
+msgstr "Журнал підтримки"
+
+#: data/ui/settings-menu.ui:15
+msgid "About"
+msgstr "Про додаток"
+
+#: data/ui/settings-menu.ui:31
+msgid "Copyright © 2020-2023 Juozas Miškinis"
+msgstr "Copyright © 2020-2023 Juozas Miškinis"
+
+#: data/ui/settings-menu.ui:38
+msgid "Debug messages are being logged. Take any steps necessary to reproduce a problem, then review the log. You should remove or censor any information you consider private."
+msgstr "Увімкнено режим налагодження із журналюванням повідомлень. Виконайте дії, що призводять до виникнення проблем, перегляньте журнал і приховайте в ньому всю особисту інформацію, перш ніж надсилати."
+
+#: data/ui/settings-menu.ui:41 data/ui/task-list-properties-dialog.ui:21
+msgid "Cancel"
+msgstr "Скасувати"
+
+#: data/ui/settings-menu.ui:46
+msgid "Review Log"
+msgstr "Переглянути журнал"
+
+#: data/ui/settings-window.ui:24
+msgid "Settings"
+msgstr "Параметри"
+
+#: data/ui/settings-window.ui:27
+msgid "Merge task lists"
+msgstr "Об'єднати списки завдань"
+
+#: data/ui/settings-window.ui:38
+msgid "Group past tasks"
+msgstr "Згрупувати минулі завдання"
+
+#: data/ui/settings-window.ui:49
+msgid "Hide header for singular task lists"
+msgstr "Не показувати заголовок для єдиного списку завдань"
+
+#: data/ui/settings-window.ui:60
+msgid "Hide empty and completed task lists"
+msgstr "Сховати пусті списки й ті, де всі завдання виконано"
+
+#: data/ui/settings-window.ui:71
+msgid "Show only selected task categories"
+msgstr "Показувати лише завдання з вибраних категорій"
+
+#: data/ui/settings-window.ui:93
+msgid "Tasks that were due yesterday or earlier"
+msgstr "Задачі, які треба було зробити вчора чи раніше"
+
+#: data/ui/settings-window.ui:101
+msgid "Due Today"
+msgstr "На сьогодні"
+
+#: data/ui/settings-window.ui:109
+msgid "Due Tomorrow"
+msgstr "На завтра"
+
+#: data/ui/settings-window.ui:122
+msgid "Due in the Next 7 Days"
+msgstr "На наступні 7 днів"
+
+#: data/ui/settings-window.ui:123
+msgid "Tasks that are due in the next seven days including today"
+msgstr "Завдання, які треба зробити за наступні 7 днів, включно з сьогоднішнім."
+
+#: data/ui/settings-window.ui:131
+msgctxt "used in Scheduled Tasks"
+msgid "Scheduled"
+msgstr "Заплановані"
+
+#: data/ui/settings-window.ui:132
+msgid "Tasks that have a due date"
+msgstr "Завдання з терміном виконання."
+
+#: data/ui/settings-window.ui:140
+msgctxt "used in Unscheduled Tasks"
+msgid "Unscheduled"
+msgstr "Незаплановані"
+
+#: data/ui/settings-window.ui:141
+msgid "Tasks that have no due date"
+msgstr "Завдання без терміну виконання"
+
+#: data/ui/settings-window.ui:154
+msgctxt "used in Started Tasks"
+msgid "Started"
+msgstr "Розпочаті"
+
+#: data/ui/settings-window.ui:155
+msgid "Tasks that either do not have a start date or the start date is earlier than current time"
+msgstr "Завдання, що почалися раніше або не мають дати початку."
+
+#: data/ui/settings-window.ui:163
+msgctxt "used in Not Cancelled Tasks"
+msgid "Not Cancelled"
+msgstr "Не скасовані"
+
+#: data/ui/settings-window.ui:175
+msgid "Hide completed tasks"
+msgstr "Ховати виконані завдання"
+
+#: data/ui/settings-window.ui:181
+msgid "Never"
+msgstr "ніколи"
+
+#: data/ui/settings-window.ui:182
+msgid "Immediately"
+msgstr "негайно"
+
+#: data/ui/settings-window.ui:183
+msgid "After a period of time after completion"
+msgstr "через певний час після виконання"
+
+#: data/ui/settings-window.ui:184
+msgid "After a specific time of the day"
+msgstr "після певного часу доби"
+
+#: data/ui/settings-window.ui:205
+msgctxt "e.g. After 5 minutes"
+msgid "After"
+msgstr "Через"
+
+#: data/ui/settings-window.ui:236
+msgctxt "e.g. After 9:00"
+msgid "After"
+msgstr "Після"
+
+#: data/ui/settings-window.ui:270
+msgid "Task Lists"
+msgstr "Списки завдань"
+
+#: data/ui/settings-window.ui:271
+msgid "You can drag and drop rows to change the order of task lists in the widget."
+msgstr "Перетягуйте рядки, щоб змінити порядок показу списків у віджеті."
+
+#: data/ui/task-list-properties-dialog.ui:12
+msgid "Task List Properties"
+msgstr "Властивості списку завдань"
+
+#: data/ui/task-list-properties-dialog.ui:26
+msgid "OK"
+msgstr "Гаразд"
+
+#. Translators: e.g. "Refresh every 10 minutes".
+#: data/ui/task-list-properties-dialog.ui:40
+msgid "Refresh every"
+msgstr "Оновлювати раз на"
+
+#: data/ui/task-list-row.ui:6
+msgid "Move Up"
+msgstr "Пересунути вгору"
+
+#: data/ui/task-list-row.ui:10
+msgid "Move Down"
+msgstr "Пересунути вниз"
+
+#: data/ui/task-list-row.ui:65
+msgid "Task list options"
+msgstr "Параметри списку завдань"
+

@@ -1,0 +1,28 @@
+default:
+  image: ubuntu:latest
+
+stages:
+  - build
+
+build:
+  stage: build
+  before_script:
+    - export DEBIAN_FRONTEND=noninteractive
+    - apt-get -y update
+    - >
+      apt-get -y install python3-pip ninja-build libglib2.0-dev
+      libxml2-utils zip gettext
+    - pip3 install meson
+    - curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+    - export NVM_DIR="$HOME/.nvm" && . "$NVM_DIR/nvm.sh"
+    - nvm install node
+    - npm install -g eslint eslint-plugin-jsdoc
+  script:
+    - meson _build -Dbuild_zip=true
+    - meson test -C _build
+    - meson install -C _build
+  artifacts:
+    name: '$CI_JOB_NAME'
+    paths:
+      - _build
+    expire_in: 1 day

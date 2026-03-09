@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface domain="org.gnome.shell.extensions.task-widget">
+  <requires lib="gtk" version="4.0"/>
+  <menu id="settingsMenu">
+    <section>
+      <item>
+        <attribute name='label' translatable='yes'>Support Log</attribute>
+        <attribute name='action'>settings-menu.log</attribute>
+      </item>
+      <item>
+        <attribute name='label'>Wiki</attribute>
+        <attribute name='action'>settings-menu.wiki</attribute>
+      </item>
+      <item>
+        <attribute name='label' translatable='yes'>About</attribute>
+        <attribute name='action'>settings-menu.about</attribute>
+      </item>
+    </section>
+  </menu>
+  <template class="SettingsMenuButton" parent="GtkMenuButton">
+    <property name="focus-on-click">0</property>
+    <property name="icon-name">open-menu-symbolic</property>
+    <property name="menu-model">settingsMenu</property>
+    <accessibility>
+      <property name="label" translatable="yes">Help</property>
+    </accessibility>
+  </template>
+  <object class="GtkAboutDialog" id="aboutDialog">
+    <property name="modal">1</property>
+    <property name="hide-on-close">1</property>
+    <property name="copyright" translatable="yes">Copyright © 2020-2023 Juozas Miškinis</property>
+    <property name="authors">Juozas Miškinis &lt;juozas@joasis.lt&gt;</property>
+    <property name="logo">resource:///org/gnome/shell/extensions/task-widget/task-widget-logo.svg</property>
+    <property name="license-type">gpl-2-0</property>
+  </object>
+  <object class="GtkMessageDialog" id="supportLogDialog">
+    <property name="text" translatable="yes">Support Log</property>
+    <property name="secondary-text" translatable="yes">Debug messages are being logged. Take any steps necessary to reproduce a problem, then review the log. You should remove or censor any information you consider private.</property>
+    <child type="action">
+      <object class="GtkButton" id="supportLogDialogCancelButton">
+        <property name="label" translatable="yes">Cancel</property>
+      </object>
+    </child>
+    <child type="action">
+      <object class="GtkButton" id="supportLogDialogReviewLogButton">
+        <property name="label" translatable="yes">Review Log</property>
+      </object>
+    </child>
+    <action-widgets>
+      <action-widget response="cancel">supportLogDialogCancelButton</action-widget>
+      <action-widget response="ok">supportLogDialogReviewLogButton</action-widget>
+    </action-widgets>
+  </object>
+</interface>

@@ -1,0 +1,7 @@
+src/extension.js
+src/prefs.js
+src/utils.js
+data/ui/settings-menu.ui
+data/ui/settings-window.ui
+data/ui/task-list-properties-dialog.ui
+data/ui/task-list-row.ui
