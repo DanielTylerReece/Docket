@@ -26,16 +26,16 @@ import {
 const DateMenu = Main.panel.statusArea.dateMenu.menu;
 const NC_ = (c, s) => pgettext(c, s);
 
-let HAS_EDS = true;
-let EDataServer, ECal, ICalGLib;
+import { AuthManager } from './auth.js';
+import { SyncEngine } from './sync-engine.js';
+import { TaskModel, sortByName, sortByDueDate, sortByPriority } from './task-model.js';
 
+let HAS_GRAPH = false;
 try {
-    EDataServer = (await import('gi://EDataServer')).default;
-    ECal = (await import('gi://ECal')).default;
-    ICalGLib = (await import('gi://ICalGLib')).default;
-} catch (e) {
-    HAS_EDS = false;
-}
+    await import('gi://Soup?version=3.0');
+    await import('gi://Secret');
+    HAS_GRAPH = true;
+} catch (e) {}
 
 export default class TaskWidgetExtension extends Extension {
     /**
@@ -167,20 +167,43 @@ const TaskWidget = GObject.registerClass(
 
                 this._loadThemeHacks(themeContext);
 
-                if (!HAS_EDS) {
+                if (!HAS_GRAPH) {
                     this._showPlaceholderWithStatus('missing-dependencies');
                     return;
                 }
 
-                // Holds references (`ECal.ClientView`) of all enabled task
-                // lists so we can monitor changes in them.
-                this._clientViews = new Map();
-
                 // Facilitates lazy loading of tasks.
                 this._upperLimit = 0;
 
-                await this._initSourceRegistry();
-                await this._storeTaskLists(true);
+                // Initialize Graph API sync engine
+                this._authManager = new AuthManager();
+                await this._authManager.loadTokens();
+                this._syncEngine = new SyncEngine(
+                    this._authManager, this._settings
+                );
+
+                this._syncEngine.connect('tasks-changed', () => {
+                    this._onSyncUpdate();
+                });
+                this._syncEngine.connect('lists-changed', () => {
+                    this._storeTaskLists();
+                    this._showActiveTaskList(this._activeTaskList || 0);
+                });
+                this._syncEngine.connect('auth-required', () => {
+                    this._showPlaceholderWithStatus('missing-dependencies');
+                });
+
+                try {
+                    await this._syncEngine.initialize();
+                } catch (e) {
+                    if (e.message === 'auth-required') {
+                        this._showPlaceholderWithStatus('missing-dependencies');
+                        return;
+                    }
+                    throw e;
+                }
+
+                this._storeTaskLists(true);
                 this._buildHeader();
 
                 this._buildQuickAddEntry();
@@ -394,44 +417,14 @@ const TaskWidget = GObject.registerClass(
 
                 if (!text) return;
 
-                // Determine which task list to add to:
                 const taskList = this._taskLists[this._activeTaskList];
 
-                if (!taskList) return;
+                if (!taskList || !this._syncEngine) return;
 
-                const view = this._clientViews.get(taskList.uid);
-
-                if (!view) return;
-
-                const client = view.client;
-
-                // Build a VTODO iCal component:
-                const component = ICalGLib.Component.new_vtodo();
-                const summary = ICalGLib.Property.new_summary(text);
-                component.add_property(summary);
-
-                // Set UID:
-                const uid = GLib.uuid_string_random();
-                component.set_uid(uid);
-
-                // Set creation timestamp:
-                const now = ICalGLib.Time.new_current_with_zone(
-                    ECal.util_get_system_timezone()
-                );
-                component.set_dtstart(now);
-                component.set_dtstamp(now);
-
-                await Utils.createObjects_(
-                    client,
-                    [component],
-                    ECal.OperationFlags.NONE,
-                    null
-                );
+                await this._syncEngine.createTask(taskList.uid, text);
 
                 this._quickAddEntry.set_text('');
 
-                // The ECal.ClientView signal handler will refresh the list
-                // automatically, but force a refresh for responsiveness:
                 this._resetTaskBox(true);
                 this._showActiveTaskList(this._activeTaskList);
             } catch (e) {
@@ -501,38 +494,7 @@ const TaskWidget = GObject.registerClass(
          *
          * @async
          */
-        async _initSourceRegistry() {
-            try {
-                this._sourceType = EDataServer.SOURCE_EXTENSION_TASK_LIST;
-                this._sourceRegistry = await Utils.getSourceRegistry_();
-
-                this._taskListAddedId = this._sourceRegistry.connect(
-                    'source-added',
-                    (self, source) => {
-                        if (source.has_extension(this._sourceType))
-                            this._onTaskListAdded(self, source);
-                    }
-                );
-
-                this._taskListRemovedId = this._sourceRegistry.connect(
-                    'source-removed',
-                    (self, source) => {
-                        if (source.has_extension(this._sourceType))
-                            this._onTaskListRemoved(self, source);
-                    }
-                );
-
-                this._taskListChangedId = this._sourceRegistry.connect(
-                    'source-changed',
-                    (self, source) => {
-                        if (source.has_extension(this._sourceType))
-                            this._onTaskListChanged(self, source);
-                    }
-                );
-            } catch (e) {
-                logError(e);
-            }
-        }
+        // _initSourceRegistry removed — replaced by SyncEngine.initialize()
 
         /**
          * Stores a list of task list data (UIDs and names) for quick access.
@@ -542,31 +504,28 @@ const TaskWidget = GObject.registerClass(
          * @param {boolean} [cleanup] - Cleanup the settings (remove obsolete
          * task list uids).
          */
-        async _storeTaskLists(cleanup = false) {
+        _storeTaskLists(cleanup = false) {
             try {
-                this._taskLists = [];
+                if (!this._syncEngine) return;
+
+                const graphLists = this._syncEngine.getTaskLists();
                 const customOrder = this._settings.get_strv('task-list-order');
                 const disabled = this._settings.get_strv('disabled-task-lists');
-                const sources = this._sourceRegistry.list_sources(
-                    this._sourceType
-                );
 
-                const customSort = customOrder.length
-                    ? Utils.customSort_.bind(this, customOrder)
-                    : undefined;
+                this._taskLists = graphLists
+                    .filter(list => disabled.indexOf(list.id) === -1)
+                    .map(list => ({uid: list.id, name: list.displayName}));
 
-                await Promise.all(
-                    sources
-                        .filter((source) => disabled.indexOf(source.uid) === -1)
-                        .map((source) => this._onTaskListAdded(null, source))
-                );
-
-                this._taskLists.sort(customSort);
+                if (customOrder.length) {
+                    this._taskLists.sort(
+                        Utils.customSort_.bind(this, customOrder)
+                    );
+                }
 
                 if (cleanup) {
                     this._cleanupSettings(
                         disabled,
-                        sources.sort(customSort).map((source) => source.uid)
+                        graphLists.map(list => list.id)
                     );
                 }
             } catch (e) {
@@ -579,166 +538,20 @@ const TaskWidget = GObject.registerClass(
          * monitor for its task additions, removals and changes.
          *
          * @async
-         * @param {EDataServer.SourceRegistry|null} registry - Source registry.
-         * @param {EDataServer.Source} source - Task list that got added.
+         * (Legacy comments from EDS version — these methods are now handled
+         * by SyncEngine signal handlers)
          */
-        async _onTaskListAdded(registry, source) {
+        // _onTaskListAdded, _onTaskListRemoved, _onTaskListChanged
+        // replaced by SyncEngine signal handlers set up in _initTaskLists
+
+        /**
+         * Handles sync engine update events (tasks changed via delta query).
+         */
+        _onSyncUpdate() {
             try {
-                let client;
-
-                if (!this._clientViews.get(source.uid)) {
-                    /**
-                     * Since `source` is only a descriptor of a data source, we
-                     * need an `ECal.Client` - interface to access the
-                     * data itself.
-                     */
-                    client = await Utils.getECalClient_(
-                        source,
-                        ECal.ClientSourceType.TASKS,
-                        1
-                    );
-
-                    /**
-                     * `ECal.ClientView` allows to receive change notifications
-                     * on task lists, specifically task additions, removals and
-                     * changes. Tasks can be matched using a specified query -
-                     * we use `#t` here which matches all tasks.
-                     */
-                    const view = await Utils.getECalClientView_(client, '#t');
-
-                    view._taskAddedId = view.connect(
-                        'objects-added',
-                        this._onTaskEvent.bind(this)
-                    );
-
-                    view._taskRemovedId = view.connect(
-                        'objects-removed',
-                        this._onTaskEvent.bind(this)
-                    );
-
-                    view._taskChangedId = view.connect(
-                        'objects-modified',
-                        this._onTaskEvent.bind(this)
-                    );
-
-                    // Do not report existing tasks as new tasks:
-                    view.set_flags(ECal.ClientViewFlags.NONE);
-                    view.start();
-                    this._clientViews.set(source.uid, view);
-                } else {
-                    ({ client } = this._clientViews.get(source.uid));
-                }
-
-                if (
-                    !(await this._filterTasks(client)) ||
-                    this._taskLists.map((i) => i.uid).indexOf(source.uid) !== -1
-                )
-                    return;
-
-                this._taskLists.push({
-                    uid: source.uid,
-                    name: source.display_name
-                });
-
-                if (!registry) return;
-
-                if (this._activeTaskList === null) this._showActiveTaskList(0);
-                else this._showActiveTaskList(this._activeTaskList);
-            } catch (e) {
-                logError(e);
-            }
-        }
-
-        /**
-         * Handles task list removal events.
-         *
-         * @param {EDataServer.SourceRegistry|null} registry - Source registry.
-         * @param {EDataServer.Source} source - Task list that got removed.
-         */
-        _onTaskListRemoved(registry, source) {
-            const view = this._clientViews.get(source.uid);
-            view.disconnect(view._taskAddedId);
-            view.disconnect(view._taskRemovedId);
-            view.disconnect(view._taskChangedId);
-            view.stop();
-            this._clientViews.delete(source.uid);
-            const index = this._taskLists.map((i) => i.uid).indexOf(source.uid);
-
-            if (index === -1 || !registry) return;
-
-            this._taskLists.splice(index, 1);
-
-            if (!this._taskLists.length) {
-                this._showPlaceholderWithStatus('no-tasks');
-                return;
-            }
-
-            this._showActiveTaskList(
-                --this._activeTaskList < 0 ? 0 : this._activeTaskList
-            );
-        }
-
-        /**
-         * Handles task list change events.
-         *
-         * @param {EDataServer.SourceRegistry} _registry - Source registry.
-         * @param {EDataServer.Source} source - Task list that got changed.
-         */
-        _onTaskListChanged(_registry, source) {
-            const index = this._taskLists.map((i) => i.uid).indexOf(source.uid);
-            const taskList = this._taskLists[index];
-
-            if (taskList) {
-                taskList.name = source.display_name;
-                this._showActiveTaskList(this._activeTaskList);
-            }
-        }
-
-        /**
-         * Handles task events: additions, removals and changes.
-         *
-         * @async
-         * @param {ECal.ClientView} view - Task list which received the signal.
-         */
-        async _onTaskEvent(view) {
-            try {
+                if (this._activeTaskList === null) return;
                 this._resetTaskBox();
-                const { uid } = view.client.source;
-                const index = this._taskLists.map((i) => i.uid).indexOf(uid);
-                const taskList = this._taskLists[index];
-                const updated = await this._filterTasks(view.client);
-
-                if (updated && !taskList) {
-                    // If we need to show a hidden task list (because it's no
-                    // longer empty or no longer completed):
-                    if (this._settings.get_boolean('merge-task-lists')) {
-                        await this._storeTaskLists();
-                    } else {
-                        this._taskLists.push({
-                            uid: view.client.source.uid,
-                            name: view.client.source.display_name
-                        });
-                    }
-
-                    this._showActiveTaskList(
-                        this._activeTaskList === null ? 0 : this._activeTaskList
-                    );
-                } else if (!updated && taskList) {
-                    // If we need to hide a visible task list (because it's now
-                    // empty or completed):
-                    this._taskLists.splice(index, 1);
-
-                    if (!this._taskLists.length) {
-                        this._showPlaceholderWithStatus('no-tasks');
-                        return;
-                    }
-
-                    this._showActiveTaskList(
-                        --this._activeTaskList < 0 ? 0 : this._activeTaskList
-                    );
-                } else if (updated && taskList) {
-                    this._showActiveTaskList(this._activeTaskList);
-                }
+                this._showActiveTaskList(this._activeTaskList);
             } catch (e) {
                 logError(e);
             }
@@ -747,20 +560,15 @@ const TaskWidget = GObject.registerClass(
         /**
          * Creates data structures required to resolve task hierarchy.
          *
-         * @param {ECal.Component[]|ECal.Component[][]} tasks - A list or a list
-         * of lists of task objects.
-         * @param {string} [taskListUid] - UID of task list tasks belong to.
+         * @param {object[]|object[][]} tasks - A list or list of lists of
+         * internal task model objects.
+         * @param {string} [taskListUid] - ID of task list tasks belong to.
          */
         _buildTaskMap(tasks, taskListUid = null) {
-            let index = 0;
-            let start = 0;
             this._rootTasks = [];
-            this._taskUids = new Set();
             this._relatedTo = new Map();
-            this._orphanTasks = new Set();
 
-            // No task list UID means we have multiple tasks lists that need
-            // to be merged into one:
+            // No task list UID means we have multiple task lists merged:
             if (taskListUid === null) {
                 tasks = [].concat(
                     ...tasks.map((taskList, i) =>
@@ -774,77 +582,33 @@ const TaskWidget = GObject.registerClass(
 
             for (const task of tasks.sort(
                 (a, b) =>
-                    Utils.sortByDueDate_(a, b) ||
-                    Utils.sortByPriority_(a, b) ||
-                    Utils.sortByName_(a, b)
+                    sortByDueDate(a, b) ||
+                    sortByPriority(a, b) ||
+                    sortByName(a, b)
             )) {
-                if (!task.get_summary()) continue;
+                if (!task.title) continue;
 
-                task._uid = task.get_icalcomponent().get_uid();
-                task._index = index++;
                 task._taskList = task._taskList ? task._taskList : taskListUid;
-                this._taskUids.add(task._uid);
+                this._rootTasks.push(task);
 
-                task._due = task.get_due()
-                    ? new Date(
-                          task
-                              .get_due()
-                              .get_value()
-                              .as_timet_with_zone(
-                                  ECal.util_get_system_timezone()
-                              ) * 1000
-                      )
-                    : null;
-
-                const related = task
-                    .get_icalcomponent()
-                    .get_first_property(
-                        ICalGLib.PropertyKind.RELATEDTO_PROPERTY
-                    );
-
-                if (related) {
-                    const parentUid = related.get_value().get_string();
-                    const parent = this._relatedTo.get(parentUid);
-
-                    if (!this._taskUids.has(parentUid))
-                        this._orphanTasks.add(parentUid);
-
-                    if (parent) parent.push(task);
-                    else this._relatedTo.set(parentUid, [task]);
-                } else {
-                    this._rootTasks.push(task);
+                // Map checklistItems as subtasks
+                if (task.checklistItems && task.checklistItems.length) {
+                    const subtasks = task.checklistItems.map(ci => ({
+                        id: ci.id,
+                        _uid: ci.id,
+                        title: ci.displayName,
+                        status: ci.isChecked ? 'completed' : 'notStarted',
+                        _due: null,
+                        dueDateTime: null,
+                        _taskList: task._taskList,
+                        _isChecklistItem: true,
+                        _parentTaskId: task.id,
+                        checklistItems: [],
+                        categories: [],
+                        importance: 'normal',
+                    }));
+                    this._relatedTo.set(task.id, subtasks);
                 }
-
-                if (this._taskUids.has(task._uid))
-                    this._orphanTasks.delete(task._uid);
-            }
-
-            // Orphan tasks are subtasks with inaccessible parents. We will
-            // add them as root tasks into correct positions:
-            for (const parentUid of this._orphanTasks) {
-                for (const task of this._relatedTo.get(parentUid)) {
-                    task._orphan = true;
-
-                    if (!this._rootTasks.length) {
-                        this._rootTasks.push(task);
-                        continue;
-                    }
-
-                    for (let i = start; i < this._rootTasks.length; i++) {
-                        if (task._index < this._rootTasks[i]._index) {
-                            this._rootTasks.splice(i, 0, task);
-                            start = i;
-                            break;
-                        }
-
-                        if (i === this._rootTasks.length - 1) {
-                            this._rootTasks.push(task);
-                            break;
-                        }
-                    }
-                }
-
-                this._relatedTo.delete(parentUid);
             }
         }
 
@@ -857,18 +621,15 @@ const TaskWidget = GObject.registerClass(
          *
          * @returns {Promise<boolean>} `true` if there's at least one task.
          */
-        async _listTasks(taskListUid, merge) {
+        _listTasks(taskListUid, merge) {
             try {
                 this._allTasksLoaded = false;
 
-                // (User-defined) Merge task lists:
+                if (!this._syncEngine) return;
+
                 if (merge) {
-                    const taskLists = await Promise.all(
-                        this._taskLists.map((tl) =>
-                            this._filterTasks(
-                                this._clientViews.get(tl.uid).client
-                            )
-                        )
+                    const taskLists = this._taskLists.map(tl =>
+                        this._filterTasks(tl.uid)
                     );
 
                     if (!taskLists.length || this._idleAddId) return;
@@ -880,19 +641,13 @@ const TaskWidget = GObject.registerClass(
                     ) {
                         let allCompleted = true;
 
-                        for (const taskList of taskLists) {
-                            for (let i = 0; i < taskList.length; i++) {
-                                if (
-                                    ![
-                                        ICalGLib.PropertyStatus.COMPLETED,
-                                        ICalGLib.PropertyStatus.CANCELLED
-                                    ].includes(taskList[i].get_status())
-                                ) {
+                        for (const tasks of taskLists) {
+                            for (const task of tasks) {
+                                if (!['completed', 'deferred'].includes(task.status)) {
                                     allCompleted = false;
                                     break;
                                 }
                             }
-
                             if (!allCompleted) break;
                         }
 
@@ -902,13 +657,9 @@ const TaskWidget = GObject.registerClass(
                         }
                     }
 
-                    if (taskLists.some((taskList) => !taskList)) return;
-
                     this._buildTaskMap(taskLists);
                 } else {
-                    const tasks = await this._filterTasks(
-                        this._clientViews.get(taskListUid).client
-                    );
+                    const tasks = this._filterTasks(taskListUid);
 
                     if (!tasks || this._idleAddId) return;
 
@@ -982,14 +733,14 @@ const TaskWidget = GObject.registerClass(
         /**
          * Builds task checkboxes.
          *
-         * @param {ECal.Component} task - Task to be displayed as a checkbox.
+         * @param {object} task - Internal task model object.
          * @param {boolean} [root] - Task is a root task (not subtask).
          *
          * @returns {Checkbox.Checkbox} Task checkbox.
          */
         _buildCheckbox(task, root = false) {
             const checkbox = new CheckBox.CheckBox(
-                task.get_summary().get_value()
+                task.title
             );
 
             // Keep track of the focused checkbox for users using
@@ -1025,7 +776,7 @@ const TaskWidget = GObject.registerClass(
                 }
             });
 
-            if (task.get_status() === ICalGLib.PropertyStatus.COMPLETED) {
+            if (task.status === 'completed') {
                 checkbox.checked = true;
                 checkbox.getLabelActor().set_opacity(100);
             }
@@ -1033,7 +784,7 @@ const TaskWidget = GObject.registerClass(
             if (root) checkbox._rootTask = true;
 
             checkbox._task = task;
-            checkbox._uid = task._uid;
+            checkbox._uid = task._uid || task.id;
 
             checkbox
                 .getLabelActor()
@@ -1044,7 +795,7 @@ const TaskWidget = GObject.registerClass(
             checkbox.getLabelActor().clutter_text.line_wrap_mode =
                 Pango.WrapMode.WORD_CHAR;
 
-            if (task.get_status() === ICalGLib.PropertyStatus.CANCELLED) {
+            if (task.status === 'deferred') {
                 checkbox.set_opacity(100);
                 checkbox.set_toggle_mode(false);
                 checkbox.set_can_focus(false);
@@ -1052,14 +803,9 @@ const TaskWidget = GObject.registerClass(
                 checkbox.getLabelActor().add_style_class_name('task-cancelled');
             } else {
                 checkbox.connect('clicked', () =>
-                    this._taskClicked(
-                        checkbox,
-                        this._clientViews.get(task._taskList).client
-                    )
+                    this._taskClicked(checkbox)
                 );
             }
-
-            if (task._orphan) return this._styleOrphanTaskCheckbox(checkbox);
 
             return checkbox;
         }
@@ -1406,19 +1152,21 @@ const TaskWidget = GObject.registerClass(
          *
          * @returns {Promise<ECal.Component[]>} List of tasks.
          */
-        async _filterTasks(client) {
+        _filterTasks(listId) {
             try {
-                // (User-defined) Show only selected task categories:
-                let query = this._showOnlySelectedCategories();
+                let tasks = this._syncEngine.getTasks(listId);
 
-                // (User-defined) Hide completed tasks:
-                if (this._settings.get_int('hide-completed-tasks'))
-                    query = `(and ${this._hideCompletedTasks()} ${query})`;
-                else if (query === '') query = '#t';
+                // Apply category filter
+                const categoryFilter = this._getCategoryFilter();
+                if (categoryFilter)
+                    tasks = tasks.filter(categoryFilter);
 
-                const tasks = await Utils.getTasks_(client, query);
+                // Apply completed filter
+                const completedFilter = this._getCompletedFilter();
+                if (completedFilter)
+                    tasks = tasks.filter(completedFilter);
 
-                // (User-defined) Hide empty and completed task lists:
+                // Hide empty and completed task lists
                 if (
                     this._settings.get_boolean(
                         'hide-empty-completed-task-lists'
@@ -1428,14 +1176,7 @@ const TaskWidget = GObject.registerClass(
                     if (!tasks.length) return;
 
                     for (const task of tasks) {
-                        const status = task.get_status();
-
-                        if (
-                            ![
-                                ICalGLib.PropertyStatus.COMPLETED,
-                                ICalGLib.PropertyStatus.CANCELLED
-                            ].includes(status)
-                        )
+                        if (!['completed', 'deferred'].includes(task.status))
                             return tasks;
                     }
 
@@ -1458,88 +1199,70 @@ const TaskWidget = GObject.registerClass(
          *
          * @returns {string} S-expression to facilitate task filtering.
          */
-        _buildQuery(start, end) {
-            return (
-                '(due-in-time-range? (make-time "' +
-                start +
-                '") ' +
-                '(make-time "' +
-                end +
-                '"))'
-            );
-        }
+        // _buildQuery removed — S-expressions are EDS-specific
 
         /**
-         * Builds an S-expression to facilitate hiding of completed tasks.
-         *
-         * @returns {string} S-expression to facilitate task filtering.
+         * Returns a filter function for hiding completed tasks based on
+         * user settings, or null if no filtering needed.
          */
-        _hideCompletedTasks() {
-            const currentTime = ICalGLib.Time.new_current_with_zone(
-                ICalGLib.Timezone.get_utc_timezone()
-            );
+        _getCompletedFilter() {
+            const mode = this._settings.get_int('hide-completed-tasks');
 
-            switch (this._settings.get_int('hide-completed-tasks')) {
+            switch (mode) {
                 case Utils.HIDE_COMPLETED_TASKS_['immediately']:
-                    return '(not is-completed?)';
+                    return (task) => task.status !== 'completed';
+
                 case Utils.HIDE_COMPLETED_TASKS_['after-time-period']: {
                     const adjust = this._settings.get_int('hct-apotac-value');
+                    const unit = this._settings.get_int('hct-apotac-unit');
+                    const now = new Date();
+                    let msAdjust = 0;
 
-                    switch (this._settings.get_int('hct-apotac-unit')) {
+                    switch (unit) {
                         case Utils.TIME_UNITS_['seconds']:
-                            currentTime.adjust(0, 0, 0, -adjust);
-                            break;
+                            msAdjust = adjust * 1000; break;
                         case Utils.TIME_UNITS_['minutes']:
-                            currentTime.adjust(0, 0, -adjust, 0);
-                            break;
+                            msAdjust = adjust * 60000; break;
                         case Utils.TIME_UNITS_['hours']:
-                            currentTime.adjust(0, -adjust, 0, 0);
-                            break;
+                            msAdjust = adjust * 3600000; break;
                         case Utils.TIME_UNITS_['days']:
-                            currentTime.adjust(-adjust, 0, 0, 0);
+                            msAdjust = adjust * 86400000; break;
                     }
-                    const iso = ECal.isodate_from_time_t(
-                        currentTime.as_timet()
-                    );
 
-                    return `(not (completed-before? (make-time "${iso}")))`;
+                    const cutoff = new Date(now.getTime() - msAdjust);
+
+                    return (task) => {
+                        if (task.status !== 'completed') return true;
+                        if (!task.completedDateTime) return false;
+                        return task.completedDateTime >= cutoff;
+                    };
                 }
 
                 case Utils.HIDE_COMPLETED_TASKS_['after-specified-time']: {
-                    const start = ICalGLib.Time.new_current_with_zone(
-                        ECal.util_get_system_timezone()
+                    const now = new Date();
+                    const startOfDay = new Date(
+                        now.getFullYear(), now.getMonth(), now.getDate()
+                    );
+                    const specHour = this._settings.get_int('hct-astod-hour');
+                    const specMin = this._settings.get_int('hct-astod-minute');
+                    const specTime = new Date(
+                        now.getFullYear(), now.getMonth(), now.getDate(),
+                        specHour, specMin, 0
                     );
 
-                    start.set_time(0, 0, 0);
-
-                    start.convert_timezone(
-                        ECal.util_get_system_timezone(),
-                        ICalGLib.Timezone.get_utc_timezone()
-                    );
-
-                    const spec = ICalGLib.Time.new_current_with_zone(
-                        ECal.util_get_system_timezone()
-                    );
-
-                    spec.set_time(
-                        this._settings.get_int('hct-astod-hour'),
-                        this._settings.get_int('hct-astod-minute'),
-                        0
-                    );
-
-                    spec.convert_timezone(
-                        ECal.util_get_system_timezone(),
-                        ICalGLib.Timezone.get_utc_timezone()
-                    );
-
-                    const iso = ECal.isodate_from_time_t(start.as_timet());
-
-                    if (currentTime.compare(spec) === -1) {
-                        return `(not (completed-before? (make-time "${iso}")))`;
+                    if (now < specTime) {
+                        return (task) => {
+                            if (task.status !== 'completed') return true;
+                            if (!task.completedDateTime) return false;
+                            return task.completedDateTime >= startOfDay;
+                        };
                     } else {
-                        return '(not is-completed?)';
+                        return (task) => task.status !== 'completed';
                     }
                 }
+
+                default:
+                    return null;
             }
         }
 
@@ -1549,110 +1272,66 @@ const TaskWidget = GObject.registerClass(
          *
          * @returns {string} S-expression to facilitate task filtering.
          */
-        _showOnlySelectedCategories() {
-            let query = '';
+        /**
+         * Returns a filter function for category-based task filtering,
+         * or null if no filtering needed.
+         */
+        _getCategoryFilter() {
             const selected = this._settings.get_strv(
                 'selected-task-categories'
             );
 
-            const currentTime = ICalGLib.Time.new_current_with_zone(
-                ICalGLib.Timezone.get_utc_timezone()
-            );
-
             if (
-                this._settings.get_boolean('show-only-selected-categories') &&
-                selected.length
-            ) {
-                const today = ECal.time_day_begin(currentTime.as_timet());
-                const yesterday = ECal.time_add_day(today, -1);
-                const tomorrow = ECal.time_add_day(today, 1);
-                const nextSevenDays = ECal.time_add_day(today, 7);
-                const startOfPast = ECal.isodate_from_time_t(0);
-                const startOfToday = ECal.isodate_from_time_t(today);
+                !this._settings.get_boolean('show-only-selected-categories') ||
+                !selected.length
+            )
+                return null;
 
-                const startOfTomorrow = ECal.isodate_from_time_t(
-                    ECal.time_day_begin(tomorrow)
-                );
+            const now = new Date();
+            const startOfToday = new Date(
+                now.getFullYear(), now.getMonth(), now.getDate()
+            );
+            const endOfToday = new Date(startOfToday.getTime() + 86400000 - 1);
+            const startOfTomorrow = new Date(startOfToday.getTime() + 86400000);
+            const endOfTomorrow = new Date(startOfTomorrow.getTime() + 86400000 - 1);
+            const endOfNextSevenDays = new Date(startOfToday.getTime() + 7 * 86400000 - 1);
+            const endOfYesterday = new Date(startOfToday.getTime() - 1);
 
-                const endOfToday = ECal.isodate_from_time_t(
-                    ECal.time_day_end(today)
-                );
+            const filters = [];
 
-                const endOfTomorrow = ECal.isodate_from_time_t(
-                    ECal.time_day_end(tomorrow)
-                );
+            // Date range filter based on selected categories
+            const dueDateFilter = (task) => {
+                const due = task.dueDateTime;
 
-                const endOfNextSevenDays = ECal.isodate_from_time_t(
-                    ECal.time_day_end(nextSevenDays)
-                );
+                if (selected.includes('past') && due && due < startOfToday)
+                    return true;
+                if (selected.includes('today') && due && due >= startOfToday && due <= endOfToday)
+                    return true;
+                if (selected.includes('tomorrow') && due && due >= startOfTomorrow && due <= endOfTomorrow)
+                    return true;
+                if (selected.includes('next-seven-days') && due && due >= startOfToday && due <= endOfNextSevenDays)
+                    return true;
 
-                const endOfYesterday = ECal.isodate_from_time_t(
-                    ECal.time_day_end(yesterday)
-                );
+                // If none of the date categories match but we have date filters,
+                // only show if no date categories are selected
+                const hasDateCategory = ['past', 'today', 'tomorrow', 'next-seven-days']
+                    .some(c => selected.includes(c));
 
-                if (
-                    ['past', 'today', 'tomorrow'].every((category) =>
-                        selected.includes(category)
-                    )
-                )
-                    query = this._buildQuery(startOfPast, endOfTomorrow);
-                else if (
-                    ['past', 'today'].every((category) =>
-                        selected.includes(category)
-                    )
-                )
-                    query = this._buildQuery(startOfPast, endOfToday);
-                else if (
-                    ['past', 'tomorrow'].every((category) =>
-                        selected.includes(category)
-                    )
-                )
-                    query = this._buildQuery(startOfPast, endOfTomorrow);
-                else if (
-                    ['today', 'tomorrow'].every((category) =>
-                        selected.includes(category)
-                    )
-                )
-                    query = this._buildQuery(startOfToday, endOfTomorrow);
-                else if (
-                    ['past', 'next-seven-days'].every((category) =>
-                        selected.includes(category)
-                    )
-                )
-                    query = this._buildQuery(startOfPast, endOfNextSevenDays);
-                else if (selected.includes('past'))
-                    query = this._buildQuery(startOfPast, endOfYesterday);
-                else if (selected.includes('today'))
-                    query = this._buildQuery(startOfToday, endOfToday);
-                else if (selected.includes('tomorrow'))
-                    query = this._buildQuery(startOfTomorrow, endOfTomorrow);
-                else if (selected.includes('next-seven-days'))
-                    query = this._buildQuery(startOfToday, endOfNextSevenDays);
+                return !hasDateCategory;
+            };
 
-                if (selected.includes('scheduled'))
-                    query = '(and ' + query + ' (has-due?))';
+            filters.push(dueDateFilter);
 
-                if (selected.includes('unscheduled'))
-                    query = '(or ' + query + '(not (has-due?)))';
+            if (selected.includes('scheduled'))
+                filters.push((task) => task.dueDateTime !== null);
 
-                if (selected.includes('started')) {
-                    query =
-                        '(or (and ' +
-                        query +
-                        ' (starts-before? ' +
-                        '(time-now))) (not (has-start?)))';
-                }
+            if (selected.includes('unscheduled'))
+                filters.push((task) => task.dueDateTime === null || dueDateFilter(task));
 
-                if (selected.includes('not-cancelled')) {
-                    query =
-                        '(and ' +
-                        query +
-                        ' (not (contains? "status" ' +
-                        '"CANCELLED")))';
-                }
-            }
+            if (selected.includes('not-cancelled'))
+                filters.push((task) => task.status !== 'deferred');
 
-            return query;
+            return (task) => filters.every(f => f(task));
         }
 
         /**
@@ -1662,69 +1341,29 @@ const TaskWidget = GObject.registerClass(
          * @param {Checkbox} checkbox - Checkbox that got clicked.
          * @param {ECal.Client} client - Task list that the task belongs to.
          */
-        async _taskClicked(checkbox, client) {
+        async _taskClicked(checkbox) {
             try {
                 this._resetTaskBox();
-                const objects = [];
+                const task = checkbox._task;
+                const listId = task._taskList;
 
-                const processTask = (cb, root = false) => {
-                    const label = cb.getLabelActor();
-                    const task = cb._task;
-
-                    if (cb.checked) {
-                        label.set_opacity(100);
-
-                        ECal.util_mark_task_complete_sync(
-                            task.get_icalcomponent(),
-                            -1,
-                            client,
-                            null
-                        );
+                if (task._isChecklistItem) {
+                    // Toggle checklist item
+                    await this._syncEngine.toggleChecklistItem(
+                        listId, task._parentTaskId, task.id
+                    );
+                } else {
+                    // Toggle task complete/uncomplete
+                    if (checkbox.checked) {
+                        checkbox.getLabelActor().set_opacity(100);
+                        await this._syncEngine.completeTask(listId, task.id);
                     } else {
-                        label.set_opacity(255);
-                        task.set_status(ICalGLib.PropertyStatus.NEEDSACTION);
-                        task.set_percent_complete(0);
-                        task.set_completed(null);
+                        checkbox.getLabelActor().set_opacity(255);
+                        await this._syncEngine.uncompleteTask(listId, task.id);
                     }
+                }
 
-                    objects.push(task.get_icalcomponent());
-
-                    if (root) resolveHierarchy(cb);
-                };
-
-                const resolveHierarchy = (cb) => {
-                    if (cb.checked) {
-                        if (!cb._subtasks) return;
-
-                        for (const subtaskCheckbox of cb._subtasks) {
-                            subtaskCheckbox.set_checked(true);
-                            processTask(subtaskCheckbox);
-                            resolveHierarchy(subtaskCheckbox);
-                        }
-                    } else {
-                        if (!cb._parentCheckbox) return;
-
-                        cb._parentCheckbox.set_checked(false);
-                        processTask(cb._parentCheckbox);
-                        resolveHierarchy(cb._parentCheckbox);
-                    }
-                };
-
-                processTask(checkbox, true);
-
-                // Some online providers (e.g. Google Tasks) prohibits from
-                // unchecking a subtask if parent task is completed. We can
-                // circumvent this by handling the parent task first:
-                if (client.check_refresh_supported())
-                    objects.sort((task) => (task._subtasks ? -1 : 1));
-
-                await Utils.modifyObjects_(
-                    client,
-                    objects,
-                    ECal.ObjModType.THIS,
-                    ECal.OperationFlags.NONE,
-                    null
-                );
+                this._showActiveTaskList(this._activeTaskList);
             } catch (e) {
                 logError(e);
             }
@@ -1765,7 +1404,7 @@ const TaskWidget = GObject.registerClass(
 
                     this._setHeader();
 
-                    if (!(await this._listTasks(taskList.uid, merge))) {
+                    if (!this._listTasks(taskList.uid, merge)) {
                         Utils.debounce_(
                             this._showActiveTaskList.bind(this),
                             'show',
@@ -2078,6 +1717,14 @@ const TaskWidget = GObject.registerClass(
             if (isOpen && this._activeTaskList !== null) {
                 let i = 0;
                 this._showActiveTaskList(this._activeTaskList);
+
+                // Trigger immediate sync and fast polling while menu is open
+                if (this._syncEngine) {
+                    this._syncEngine.sync().catch(e =>
+                        logError(e, 'sync on menu open'));
+                    this._syncEngine.startPolling(30);
+                }
+
                 const hct = this._settings.get_int('hide-completed-tasks');
 
                 if (Utils.HIDE_COMPLETED_TASKS_IS_TIME_DEPENDENT_(hct)) {
@@ -2095,6 +1742,12 @@ const TaskWidget = GObject.registerClass(
                     );
                 }
             } else if (!isOpen) {
+                // Switch to background polling
+                if (this._syncEngine) {
+                    const interval = this._settings.get_int('sync-interval-minutes') || 5;
+                    this._syncEngine.startPolling(interval * 60);
+                }
+
                 if (this._refreshTimeoutId) {
                     GLib.source_remove(this._refreshTimeoutId);
                     delete this._refreshTimeoutId;
@@ -2202,18 +1855,14 @@ const TaskWidget = GObject.registerClass(
 
             if (this._onMenuOpenId) DateMenu.disconnect(this._onMenuOpenId);
 
-            if (this._taskListAddedId)
-                this._sourceRegistry.disconnect(this._taskListAddedId);
+            if (this._syncEngine) {
+                this._syncEngine.destroy();
+                this._syncEngine = null;
+            }
 
-            if (this._taskListRemovedId)
-                this._sourceRegistry.disconnect(this._taskListRemovedId);
-
-            if (this._taskListChangedId)
-                this._sourceRegistry.disconnect(this._taskListChangedId);
-
-            if (this._clientViews) {
-                for (const [, view] of this._clientViews)
-                    this._onTaskListRemoved(null, view.client.source);
+            if (this._authManager) {
+                this._authManager.destroy();
+                this._authManager = null;
             }
 
             Utils.removeDebounceTimeouts_();

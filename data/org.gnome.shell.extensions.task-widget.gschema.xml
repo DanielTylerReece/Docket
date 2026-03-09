@@ -44,5 +44,17 @@
     <key name="selected-task-categories" type="as">
       <default>[]</default>
     </key>
+    <key name="sync-interval-minutes" type="i">
+      <default>5</default>
+      <summary>Background sync interval in minutes</summary>
+    </key>
+    <key name="delta-tokens" type="s">
+      <default>""</default>
+      <summary>JSON-encoded delta tokens per task list</summary>
+    </key>
+    <key name="task-cache" type="s">
+      <default>""</default>
+      <summary>JSON-encoded task cache for cold start</summary>
+    </key>
   </schema>
 </schemalist>
