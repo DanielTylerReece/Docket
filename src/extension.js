@@ -262,6 +262,8 @@ const Docket = GObject.registerClass(
                     this._onSettingsChanged.bind(this)
                 );
 
+                this._watchForAuth();
+
                 if (!this._taskLists.length) {
                     this._showPlaceholderWithStatus('no-tasks');
                     return;
@@ -1686,24 +1688,30 @@ const Docket = GObject.registerClass(
             this._authWatchId = this._settings.connect(
                 'changed::auth-event', () => {
                     const val = this._settings.get_string('auth-event');
-                    if (val.startsWith('sign-in:')) {
-                        this._settings.disconnect(this._authWatchId);
-                        this._authWatchId = 0;
-                        // Tear down current state and re-init
-                        if (this._syncEngine) {
-                            this._syncEngine.destroy();
-                            this._syncEngine = null;
-                        }
-                        if (this._authManager) {
-                            this._authManager.destroy();
-                            this._authManager = null;
-                        }
-                        if (this._contentBox) {
-                            this._contentBox.destroy();
-                            this._contentBox = null;
-                        }
-                        this._initTaskLists();
+                    if (!val) return;
+                    // Tear down current state and re-init on any auth event
+                    if (this._syncEngine) {
+                        this._syncEngine.destroy();
+                        this._syncEngine = null;
                     }
+                    if (this._authManager) {
+                        this._authManager.destroy();
+                        this._authManager = null;
+                    }
+                    if (this._contentBox) {
+                        this._contentBox.destroy();
+                        this._contentBox = null;
+                    }
+                    if (this._onMenuOpenId) {
+                        DateMenu.disconnect(this._onMenuOpenId);
+                        this._onMenuOpenId = 0;
+                    }
+                    if (this._settingsChangedId) {
+                        this._settings.disconnect(this._settingsChangedId);
+                        this._settingsChangedId = 0;
+                    }
+                    this._linkLabel.hide();
+                    this._initTaskLists();
                 }
             );
         }
