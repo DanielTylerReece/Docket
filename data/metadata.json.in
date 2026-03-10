@@ -4,16 +4,11 @@
     "gettext-domain": "@EXTENSION_BASE@",
     "gresource": "@EXTENSION_BASE@.gresource",
     "epath": "@EXTENSION_PATH@",
-    "name": "Task Widget",
-    "description": "Display tasks next to the calendar widget.\n\nVisit our Wiki page for more information and troubleshooting.",
+    "name": "Docket",
+    "description": "Display Microsoft To Do tasks next to the calendar widget in the GNOME Shell date menu.",
     "version": @EXTENSION_VERSION@,
     "shell-version": [ "48", "49" ],
-    "donations": {
-      "buymeacoffee": "jmiskinis",
-      "paypal": "jmiskinis",
-      "liberapay": "joasis"
-    },
-    "url": "https://gitlab.com/jmiskinis/gnome-shell-extension-task-widget",
-    "wiki": "https://gitlab.com/jmiskinis/gnome-shell-extension-task-widget/wikis",
-    "dependencies": "https://gitlab.com/jmiskinis/gnome-shell-extension-task-widget/wikis/Installation"
+    "url": "https://github.com/tyler-reece/docket",
+    "wiki": "https://github.com/tyler-reece/docket/wiki",
+    "dependencies": "https://github.com/tyler-reece/docket#installation"
 }

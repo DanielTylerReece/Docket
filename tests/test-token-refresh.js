@@ -26,12 +26,12 @@ function sendRequest(session, message) {
 async function test() {
     try {
         // Load tokens from curl test phase
-        const file = Gio.File.new_for_path('/tmp/task-widget-test-tokens.json');
+        const file = Gio.File.new_for_path('/tmp/docket-test-tokens.json');
         const [ok, contents] = file.load_contents(null);
         const tokens = JSON.parse(new TextDecoder('utf-8').decode(contents));
 
         if (!tokens.refresh_token) {
-            console.error('FAIL: No refresh_token in /tmp/task-widget-test-tokens.json');
+            console.error('FAIL: No refresh_token in /tmp/docket-test-tokens.json');
             loop.quit();
             return;
         }
@@ -62,13 +62,13 @@ async function test() {
                 expires_in: data.expires_in,
                 token_type: data.token_type,
             }, null, 2);
-            const outFile = Gio.File.new_for_path('/tmp/task-widget-test-tokens.json');
+            const outFile = Gio.File.new_for_path('/tmp/docket-test-tokens.json');
             outFile.replace_contents(
                 new TextEncoder().encode(newTokens),
                 null, false,
                 Gio.FileCreateFlags.REPLACE_DESTINATION, null
             );
-            console.log('  Updated /tmp/task-widget-test-tokens.json');
+            console.log('  Updated /tmp/docket-test-tokens.json');
         } else {
             console.error(`FAIL: ${data.error}: ${data.error_description}`);
         }

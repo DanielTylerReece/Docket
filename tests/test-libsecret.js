@@ -5,7 +5,7 @@ import Secret from 'gi://Secret';
 const loop = new GLib.MainLoop(null, false);
 
 const TEST_SCHEMA = new Secret.Schema(
-    'org.gnome.shell.extensions.task-widget.test',
+    'org.gnome.shell.extensions.docket.test',
     Secret.SchemaFlags.NONE,
     {'token_type': Secret.SchemaAttributeType.STRING}
 );

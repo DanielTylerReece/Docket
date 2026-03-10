@@ -1,8 +1,8 @@
-project_identifier: task-widget
+project_identifier: docket
 commit_message: New translations (%language%)
 append_commit_message:
 files:
-  - source: /data/po/org.gnome.shell.extensions.task-widget.pot
+  - source: /data/po/org.gnome.shell.extensions.docket.pot
     translation: /data/po/%locale%.po
     languages_mapping:
       locale:

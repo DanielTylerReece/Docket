@@ -1,86 +1,86 @@
-.task-widget-remove-calendar-margin:ltr {
+.docket-remove-calendar-margin:ltr {
   margin-right: 0;
 }
 
-.task-widget-remove-calendar-margin:rtl {
+.docket-remove-calendar-margin:rtl {
   margin-left: 0;
 }
 
-.task-widget-remove-task-box-padding {
+.docket-remove-task-box-padding {
   padding-left: 0;
   padding-right: 0;
 }
 
-.task-widget-column {
+.docket-column {
   margin: 0;
   padding: 0;
 }
 
-.task-widget-column .task-icon {
+.docket-column .task-icon {
   color: #bebebe;
 }
 
-.task-widget-column .task-cancelled {
+.docket-column .task-cancelled {
   text-decoration: line-through;
 }
 
-.task-widget-column .calendar-month-header {
+.docket-column .calendar-month-header {
   margin-bottom: 10px;
 }
 
-.task-widget-column .subtask-label {
+.docket-column .subtask-label {
   font-size: 95%;
 }
 
-.task-widget-column .subtask-indicator {
+.docket-column .subtask-indicator {
   font-size: 1.3em;
   color: rgba(128, 128, 128, 0.7);
 }
 
-.task-widget-column .world-clocks-city:rtl {
+.docket-column .world-clocks-city:rtl {
   text-align: right;
 }
 
-.task-widget-column .transparent {
+.docket-column .transparent {
   background-color: transparent;
 }
 
-.task-widget-column .world-clocks-city {
+.docket-column .world-clocks-city {
   font-weight: normal;
 }
 
-.task-widget-column .task-list-name {
+.docket-column .task-list-name {
   background: transparent;
   margin: 0;
   width: auto;
 }
 
-.task-widget-column .task-list-name-button {
+.docket-column .task-list-name-button {
   padding: 5px 10px;
   margin: 0;
 }
 
-.task-widget-column .task-list-name:ltr {
+.docket-column .task-list-name:ltr {
   padding: 0 5px 0 0;
 }
 
-.task-widget-column .task-list-name:rtl {
+.docket-column .task-list-name:rtl {
   padding: 0 0 0 5px;
 }
 
 /* Quick-add date picker button */
-.task-widget-column .quick-add-date-button {
+.docket-column .quick-add-date-button {
   padding: 4px 8px;
   border-radius: 6px;
   min-width: 32px;
 }
 
-.task-widget-column .quick-add-date-button:active {
+.docket-column .quick-add-date-button:active {
   background-color: rgba(53, 132, 228, 0.5);
 }
 
 /* Inline calendar picker */
-.task-widget-column .quick-add-calendar {
+.docket-column .quick-add-calendar {
   margin: 0 8px 4px 8px;
   padding: 8px;
   border-radius: 6px;
@@ -88,14 +88,14 @@
   spacing: 2px;
 }
 
-.task-widget-column .quick-add-calendar-dow {
+.docket-column .quick-add-calendar-dow {
   font-weight: bold;
   font-size: 0.8em;
   color: rgba(255, 255, 255, 0.5);
   padding: 2px 0;
 }
 
-.task-widget-column .quick-add-calendar-day {
+.docket-column .quick-add-calendar-day {
   min-width: 28px;
   min-height: 28px;
   border-radius: 14px;
@@ -104,25 +104,25 @@
   text-align: center;
 }
 
-.task-widget-column .quick-add-calendar-day:hover {
+.docket-column .quick-add-calendar-day:hover {
   background-color: rgba(255, 255, 255, 0.1);
 }
 
-.task-widget-column .quick-add-calendar-day:active {
+.docket-column .quick-add-calendar-day:active {
   background-color: rgba(53, 132, 228, 0.7);
   color: white;
 }
 
-.task-widget-column .quick-add-calendar-day-other {
+.docket-column .quick-add-calendar-day-other {
   color: rgba(255, 255, 255, 0.3);
 }
 
-.task-widget-column .quick-add-calendar-day-today {
+.docket-column .quick-add-calendar-day-today {
   font-weight: bold;
   border: 1px solid rgba(53, 132, 228, 0.6);
 }
 
-.task-widget-column .quick-add-calendar-action {
+.docket-column .quick-add-calendar-action {
   font-size: 0.85em;
   padding: 4px 8px;
 }

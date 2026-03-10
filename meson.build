@@ -1,11 +1,11 @@
-project('task-widget', 'c',
-  version: '23',
+project('docket', 'c',
+  version: '1.0.0',
   meson_version: '>= 1.2.2'
 )
 
-ext_uuid = 'task-widget@juozasmiskinis.gitlab.io'
-ext_base = 'org.gnome.shell.extensions.task-widget'
-ext_path = '/org/gnome/shell/extensions/task-widget'
+ext_uuid = 'docket@tylerreece.com'
+ext_base = 'org.gnome.shell.extensions.docket'
+ext_path = '/org/gnome/shell/extensions/docket'
 
 gnome = import('gnome')
 i18n = import('i18n')

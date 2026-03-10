@@ -54,7 +54,7 @@ const _loadResource = () => {
 
     _resource = Gio.Resource.load(
         import.meta.url.slice(7, -8) +
-            'org.gnome.shell.extensions.task-widget.gresource'
+            'org.gnome.shell.extensions.docket.gresource'
     );
 
     Gio.resources_register(_resource);
@@ -62,7 +62,7 @@ const _loadResource = () => {
 
 _loadResource();
 
-export default class TaskWidgetExtensionPreferences extends ExtensionPreferences {
+export default class DocketExtensionPreferences extends ExtensionPreferences {
     /**
      * Displays the preferences window if Microsoft Graph API dependencies
      * (Soup3, libsecret) are installed. Otherwise, an instance of
@@ -74,7 +74,7 @@ export default class TaskWidgetExtensionPreferences extends ExtensionPreferences
         _loadResource();
 
         const widget = HAS_GRAPH
-            ? new TaskWidgetSettings(this.getSettings(), this.metadata)
+            ? new DocketSettings(this.getSettings(), this.metadata)
             : new BeGoneWidget(this.metadata);
 
         window.add(widget);
@@ -105,7 +105,7 @@ const BeGoneWidget = GObject.registerClass(
                 });
 
                 dialog.add_button(_('Help'), 0);
-                dialog.set_name('task-widget-error');
+                dialog.set_name('docket-error');
                 dialog.present();
 
                 dialog.connect('response', (widget, responseId) => {
@@ -130,11 +130,11 @@ const BeGoneWidget = GObject.registerClass(
     }
 );
 
-const TaskWidgetSettings = GObject.registerClass(
+const DocketSettings = GObject.registerClass(
     {
-        GTypeName: 'TaskWidgetSettings',
+        GTypeName: 'DocketSettings',
         Template:
-            'resource:///org/gnome/shell/extensions/task-widget/settings-window.ui',
+            'resource:///org/gnome/shell/extensions/docket/settings-window.ui',
         InternalChildren: [
             'mtlSwitch',
             'gptSwitch',
@@ -162,7 +162,7 @@ const TaskWidgetSettings = GObject.registerClass(
             'taskListBox'
         ]
     },
-    class TaskWidgetSettings extends Adw.PreferencesPage {
+    class DocketSettings extends Adw.PreferencesPage {
         /**
          * Initializes the settings widget.
          *
@@ -675,7 +675,7 @@ const TaskWidgetSettings = GObject.registerClass(
          * Adds custom buttons to the header bar as soon as the widget gets
          * realized.
          *
-         * @param {TaskWidgetSettings} widget - Widget that has been realized.
+         * @param {DocketSettings} widget - Widget that has been realized.
          */
         _onRealized(widget) {
             this._window = widget.get_root();
@@ -695,7 +695,7 @@ const TaskListRow = GObject.registerClass(
     {
         GTypeName: 'TaskListRow',
         Template:
-            'resource:///org/gnome/shell/extensions/task-widget/task-list-row.ui',
+            'resource:///org/gnome/shell/extensions/docket/task-list-row.ui',
         InternalChildren: [
             'taskListProvider',
             'taskListSwitch',
@@ -708,7 +708,7 @@ const TaskListRow = GObject.registerClass(
          * Initializes a task list row.
          *
          * @param {object} list - Task list object with {id, displayName}.
-         * @param {TaskWidgetSettings} widget - Reference to the main widget
+         * @param {DocketSettings} widget - Reference to the main widget
          * class.
          */
         _init(list, widget) {
@@ -859,14 +859,14 @@ const SettingsMenuButton = GObject.registerClass(
     {
         GTypeName: 'SettingsMenuButton',
         Template:
-            'resource:///org/gnome/shell/extensions/task-widget/settings-menu.ui',
+            'resource:///org/gnome/shell/extensions/docket/settings-menu.ui',
         InternalChildren: ['aboutDialog', 'supportLogDialog']
     },
     class SettingsMenuButton extends Gtk.MenuButton {
         /**
          * Initializes the settings menu.
          *
-         * @param {TaskWidgetSettings} widget - Reference to the main widget
+         * @param {DocketSettings} widget - Reference to the main widget
          * class.
          */
         _init(widget) {
@@ -949,7 +949,7 @@ const SettingsMenuButton = GObject.registerClass(
                             )
                     });
 
-                const [file, stream] = Gio.File.new_tmp('taskwidget.XXXXXX');
+                const [file, stream] = Gio.File.new_tmp('docket.XXXXXX');
                 const logFile = stream.get_output_stream();
                 const widgetName = `${this._metadata.name} v${this._metadata.version}`;
 

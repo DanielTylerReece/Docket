@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <schemalist>
-  <schema id="org.gnome.shell.extensions.task-widget"
-        path="/org/gnome/shell/extensions/task-widget/">
+  <schema id="org.gnome.shell.extensions.docket"
+        path="/org/gnome/shell/extensions/docket/">
     <key name="last-active" type="s">
       <default>""</default>
     </key>

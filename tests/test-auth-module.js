@@ -1,6 +1,6 @@
 // Test 2.6: Full AuthManager API — store tokens, retrieve, refresh, clear
 //
-// This test uses the refresh_token from /tmp/task-widget-test-tokens.json
+// This test uses the refresh_token from /tmp/docket-test-tokens.json
 // to bootstrap the AuthManager without requiring interactive device code flow.
 import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
@@ -29,7 +29,7 @@ async function test() {
 
     // 2. Bootstrap: load refresh token from curl test, store it in keyring
     try {
-        const file = Gio.File.new_for_path('/tmp/task-widget-test-tokens.json');
+        const file = Gio.File.new_for_path('/tmp/docket-test-tokens.json');
         const [ok, contents] = file.load_contents(null);
         const tokens = JSON.parse(new TextDecoder('utf-8').decode(contents));
 

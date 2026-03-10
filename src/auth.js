@@ -10,7 +10,7 @@ const SCOPES = 'Tasks.ReadWrite offline_access User.Read';
 const CLIENT_ID = 'f4139154-f6d0-40bf-88e9-3e5ec774c47c';
 
 const TOKEN_SCHEMA = new Secret.Schema(
-    'org.gnome.shell.extensions.task-widget.tokens',
+    'org.gnome.shell.extensions.docket.tokens',
     Secret.SchemaFlags.NONE,
     {'token_type': Secret.SchemaAttributeType.STRING}
 );
@@ -275,7 +275,7 @@ export class AuthManager {
                 TOKEN_SCHEMA,
                 attributes,
                 Secret.COLLECTION_DEFAULT,
-                `task-widget-${attributes['token_type']}`,
+                `docket-${attributes['token_type']}`,
                 secret,
                 null,
                 (source, result) => {

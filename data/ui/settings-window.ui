@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<interface domain="org.gnome.shell.extensions.task-widget">
+<interface domain="org.gnome.shell.extensions.docket">
   <requires lib="gtk" version="4.0"/>
   <object class="GtkAdjustment" id="hctApotacAdjustment">
     <property name="lower">1</property>
@@ -14,9 +14,9 @@
     <property name="upper">59</property>
     <property name="step-increment">1</property>
   </object>
-  <template class="TaskWidgetSettings" parent="AdwPreferencesPage">
-    <property name="name">task-widget-settings</property>
-    <property name="title">Task Widget Settings</property>
+  <template class="DocketSettings" parent="AdwPreferencesPage">
+    <property name="name">docket-settings</property>
+    <property name="title">Docket Settings</property>
     <signal name="realize" handler="_onRealized"/>
     <signal name="unrealize" handler="_onUnrealized"/>
     <child>

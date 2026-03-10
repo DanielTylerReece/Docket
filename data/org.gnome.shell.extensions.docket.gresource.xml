@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <gresources>
-  <gresource prefix="/org/gnome/shell/extensions/task-widget">
+  <gresource prefix="/org/gnome/shell/extensions/docket">
     <file compressed="true" alias="prefs.css">css/prefs.css</file>
 
     <file compressed="true" preprocess="xml-stripblanks" alias="settings-window.ui">ui/settings-window.ui</file>
@@ -8,6 +8,6 @@
     <file compressed="true" preprocess="xml-stripblanks" alias="task-list-row.ui">ui/task-list-row.ui</file>
     <file compressed="true" preprocess="xml-stripblanks" alias="task-list-properties-dialog.ui">ui/task-list-properties-dialog.ui</file>
 
-    <file compressed="true" preprocess="xml-stripblanks" alias="task-widget-logo.svg">images/task-widget-logo.svg</file>
+    <file compressed="true" preprocess="xml-stripblanks" alias="docket-logo.svg">images/docket-logo.svg</file>
   </gresource>
 </gresources>

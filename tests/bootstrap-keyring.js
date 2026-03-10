@@ -1,4 +1,4 @@
-// Bootstrap: Store tokens from /tmp/task-widget-test-tokens.json into GNOME Keyring
+// Bootstrap: Store tokens from /tmp/docket-test-tokens.json into GNOME Keyring
 // so the extension can authenticate on load without device code flow.
 import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
@@ -9,7 +9,7 @@ const loop = new GLib.MainLoop(null, false);
 async function bootstrap() {
     try {
         const auth = new AuthManager();
-        const file = Gio.File.new_for_path('/tmp/task-widget-test-tokens.json');
+        const file = Gio.File.new_for_path('/tmp/docket-test-tokens.json');
         const [ok, contents] = file.load_contents(null);
         const tokens = JSON.parse(new TextDecoder('utf-8').decode(contents));
 

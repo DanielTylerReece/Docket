@@ -9,7 +9,7 @@ const BASE = 'https://graph.microsoft.com/v1.0';
 
 async function bootstrapAuth() {
     const auth = new AuthManager();
-    const file = Gio.File.new_for_path('/tmp/task-widget-test-tokens.json');
+    const file = Gio.File.new_for_path('/tmp/docket-test-tokens.json');
     const [ok, contents] = file.load_contents(null);
     const tokens = JSON.parse(new TextDecoder('utf-8').decode(contents));
     await auth._storeTokenResponse({

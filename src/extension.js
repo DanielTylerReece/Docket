@@ -37,14 +37,14 @@ try {
     HAS_GRAPH = true;
 } catch (e) {}
 
-export default class TaskWidgetExtension extends Extension {
+export default class DocketExtension extends Extension {
     /**
      * Called when the extension is enabled.
      *
      * https://gjs.guide/extensions/overview/anatomy.html#extension-js-required
      */
     enable() {
-        this._widget = new TaskWidget(this.getSettings(), this.metadata);
+        this._widget = new Docket(this.getSettings(), this.metadata);
     }
 
     /**
@@ -57,8 +57,8 @@ export default class TaskWidgetExtension extends Extension {
     }
 }
 
-const TaskWidget = GObject.registerClass(
-    class TaskWidget extends St.BoxLayout {
+const Docket = GObject.registerClass(
+    class Docket extends St.BoxLayout {
         /**
          * Initializes the widget.
          *
@@ -67,11 +67,11 @@ const TaskWidget = GObject.registerClass(
          */
         _init(settings, metadata) {
             super._init({
-                name: 'taskWidget',
+                name: 'docket',
                 // Re-use style classes. We'll do it in multiple places for
                 // better compatibility with custom Shell themes.
                 style_class:
-                    'datemenu-calendar-column task-widget-column message-list',
+                    'datemenu-calendar-column docket-column message-list',
                 orientation: Clutter.Orientation.VERTICAL
             });
 
@@ -145,11 +145,11 @@ const TaskWidget = GObject.registerClass(
                 });
 
                 this._calendarWidget.add_style_class_name(
-                    'task-widget-remove-calendar-margin'
+                    'docket-remove-calendar-margin'
                 );
 
                 this._contentBox.add_style_class_name(
-                    'task-widget-remove-task-box-padding'
+                    'docket-remove-task-box-padding'
                 );
 
                 this._contentBox.bind_property(
@@ -2072,11 +2072,11 @@ const TaskWidget = GObject.registerClass(
         _onDestroy() {
             if (
                 this._calendarWidget.has_style_class_name(
-                    'task-widget-remove-calendar-margin'
+                    'docket-remove-calendar-margin'
                 )
             ) {
                 this._calendarWidget.remove_style_class_name(
-                    'task-widget-remove-calendar-margin'
+                    'docket-remove-calendar-margin'
                 );
             }
 

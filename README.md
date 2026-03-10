@@ -1,18 +1,49 @@
-# Task Widget
+# Docket
 
-![gnome-shell-extension-task-widget-screenshot](https://gitlab.com/jmiskinis/gnome-shell-extension-task-widget/-/wikis/uploads/2c2c1cdec25c6df1ec8a5bf530b10c70/gnome-shell-extension-task-widget-screenshot.png)
+A GNOME Shell extension that displays your Microsoft To Do tasks next to the calendar widget in the date menu.
 
-Task Widget is an extension for GNOME that displays tasks next to the calendar widget. It integrates seamlessly with [GNOME Online Accounts](https://wiki.gnome.org/Projects/GnomeOnlineAccounts) and a number of GNOME applications, such as [Evolution](https://wiki.gnome.org/Apps/Evolution) and [Endeavour](https://wiki.gnome.org/Apps/Todo). With Task Widget you can:
+## Features
 
-- Easily access your task lists in the top menu
-- Merge task lists
+- View and manage Microsoft To Do tasks from the GNOME Shell top bar
+- Quick-add tasks with optional due date via inline calendar picker
+- Merge task lists into a single view
 - Group tasks by due date
-- Mark tasks as (un)completed
+- Mark tasks as completed/uncompleted
 - Hide completed and empty task lists
-- Hide completed tasks
-- Toggle task list visibility and change its display order
-- And more...
+- Toggle task list visibility and reorder
+- Delta sync for efficient background updates
+- Device code OAuth2 flow for secure Microsoft account sign-in
 
-For [installation instructions](../../wikis/Installation), [full feature list](../../wikis/Features), [ways to contribute](../../wikis/Contributing) and [help](../../wikis/Help), please refer to our [Wiki](../../wikis) page.
+## Installation
 
-[![Get it on GNOME Extensions](https://gitlab.com/jmiskinis/gnome-shell-extension-task-widget/-/wikis/uploads/66cace096c966ca54749d66a48103385/get-it-on-gnome-extensions.svg)](https://extensions.gnome.org/extension/3569/task-widget)
+### Dependencies
+
+- GNOME Shell 48 or 49
+- libsoup3
+- libsecret (GNOME Keyring)
+
+### From Source
+
+```bash
+git clone https://github.com/tyler-reece/docket.git
+cd docket
+meson setup builddir --prefix="$HOME/.local"
+meson install -C builddir
+```
+
+Then restart GNOME Shell (Alt+F2 → `r` on X11, or log out/in on Wayland) and enable via GNOME Extensions app.
+
+## Setup
+
+1. Open the extension preferences
+2. Click **Sign In** under Microsoft Account
+3. Complete the device code flow (code is copied to clipboard automatically)
+4. Your Microsoft To Do task lists will appear
+
+## Credits
+
+Originally forked from [Task Widget](https://gitlab.com/jmiskinis/gnome-shell-extension-task-widget) by Juozas Miskinis. Rewritten to use Microsoft Graph API instead of Evolution Data Server.
+
+## License
+
+GPL-2.0
