@@ -56,5 +56,9 @@
       <default>""</default>
       <summary>JSON-encoded task cache for cold start</summary>
     </key>
+    <key name="auth-event" type="s">
+      <default>""</default>
+      <summary>Timestamp written by prefs on sign-in/sign-out to trigger extension reload</summary>
+    </key>
   </schema>
 </schemalist>

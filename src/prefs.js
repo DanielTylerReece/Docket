@@ -503,7 +503,8 @@ const DocketSettings = GObject.registerClass(
                 // Wait for poll completion
                 await flow.pollPromise;
 
-                // Success — rebuild auth section and load task lists
+                // Success — notify extension and rebuild UI
+                this._settings.set_string('auth-event', `sign-in:${Date.now()}`);
                 this.remove(this._authGroup);
                 this._buildAuthSection();
                 await this._loadTaskLists();
@@ -526,6 +527,7 @@ const DocketSettings = GObject.registerClass(
         async _onSignOut() {
             try {
                 await this._authManager.clearTokens();
+                this._settings.set_string('auth-event', `sign-out:${Date.now()}`);
 
                 // Clear task list rows
                 let row = this._taskListBox.get_row_at_index(0);

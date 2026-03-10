@@ -198,6 +198,7 @@ const Docket = GObject.registerClass(
                 } catch (e) {
                     if (e.message === 'auth-required') {
                         this._showPlaceholderWithStatus('missing-dependencies');
+                        this._watchForAuth();
                         return;
                     }
                     throw e;
@@ -1670,6 +1671,38 @@ const Docket = GObject.registerClass(
         }
 
         /**
+         * Watches the 'auth-event' GSettings key for changes from prefs.
+         * When prefs completes sign-in, it writes to this key, triggering
+         * the extension to re-initialize.
+         */
+        _watchForAuth() {
+            if (this._authWatchId) return;
+            this._authWatchId = this._settings.connect(
+                'changed::auth-event', () => {
+                    const val = this._settings.get_string('auth-event');
+                    if (val.startsWith('sign-in:')) {
+                        this._settings.disconnect(this._authWatchId);
+                        this._authWatchId = 0;
+                        // Tear down current state and re-init
+                        if (this._syncEngine) {
+                            this._syncEngine.destroy();
+                            this._syncEngine = null;
+                        }
+                        if (this._authManager) {
+                            this._authManager.destroy();
+                            this._authManager = null;
+                        }
+                        if (this._contentBox) {
+                            this._contentBox.destroy();
+                            this._contentBox = null;
+                        }
+                        this._initTaskLists();
+                    }
+                }
+            );
+        }
+
+        /**
          * Sets placeholder appearance and text.
          *
          * @param {string} status - String to differentiate between various
@@ -2094,6 +2127,9 @@ const Docket = GObject.registerClass(
 
             if (this._settingsChangedId)
                 this._settings.disconnect(this._settingsChangedId);
+
+            if (this._authWatchId)
+                this._settings.disconnect(this._authWatchId);
 
             if (this._cleanUpId) GLib.source_remove(this._cleanUpId);
 
