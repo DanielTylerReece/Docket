@@ -147,7 +147,9 @@ const Docket = GObject.registerClass(
             try {
                 this._contentBox = new St.BoxLayout({
                     style_class: `calendar world-clocks-button transparent`,
-                    orientation: Clutter.Orientation.VERTICAL
+                    orientation: Clutter.Orientation.VERTICAL,
+                    y_expand: true,
+                    x_expand: true,
                 });
 
                 this._calendarWidget.add_style_class_name(
@@ -217,7 +219,8 @@ const Docket = GObject.registerClass(
 
                 this._scrollView = new St.ScrollView({
                     style_class: 'vfade',
-                    clip_to_allocation: true
+                    clip_to_allocation: true,
+                    y_expand: true,
                 });
 
                 this._scrollView
@@ -244,6 +247,9 @@ const Docket = GObject.registerClass(
 
                 this._scrollView.add_child(this._taskBox);
                 this._contentBox.add_child(this._scrollView);
+
+                // Hide completed tasks row
+                this._buildCompletedRow();
 
                 this._themeChangedId = themeContext.connect(
                     'notify::scale-factor',
@@ -609,6 +615,124 @@ const Docket = GObject.registerClass(
 
             this._contentBox.add_child(this._calendarPicker);
             this._updateCalendarGrid();
+        }
+
+        /**
+         * Builds the "Hide completed tasks" dropdown row at the bottom
+         * of the panel content area.
+         */
+        _buildCompletedRow() {
+            const COMPLETED_MODE_LABELS = [
+                _('Never'),
+                _('Immediately'),
+                _('After a period of time after completion'),
+                _('After a specific time of the day'),
+            ];
+
+            // Bottom row container
+            this._completedRow = new St.BoxLayout({
+                style_class: 'calendar-change-month-back',
+                x_align: Clutter.ActorAlign.CENTER,
+                y_align: Clutter.ActorAlign.END,
+            });
+
+            this._completedLabel = new St.Label({
+                text: _('Hide completed tasks:'),
+                style_class: 'task-list-name',
+                y_align: Clutter.ActorAlign.CENTER,
+            });
+
+            this._completedModeButton = new St.Button({
+                style_class: 'calendar-change-month-back pager-button',
+                can_focus: true,
+                accessible_name: _('Hide completed tasks mode'),
+                y_align: Clutter.ActorAlign.CENTER,
+            });
+
+            const modeButtonBox = new St.BoxLayout({ style_class: 'pager' });
+            this._completedModeLabel = new St.Label({
+                text: COMPLETED_MODE_LABELS[this._settings.get_int('hide-completed-tasks')],
+                y_align: Clutter.ActorAlign.CENTER,
+            });
+            const modeArrow = new St.Icon({
+                style_class: 'popup-menu-arrow',
+                icon_name: 'pan-down-symbolic',
+                icon_size: 12,
+                y_align: Clutter.ActorAlign.CENTER,
+            });
+            modeButtonBox.add_child(this._completedModeLabel);
+            modeButtonBox.add_child(modeArrow);
+            this._completedModeButton.set_child(modeButtonBox);
+
+            this._completedRow.add_child(this._completedLabel);
+            this._completedRow.add_child(this._completedModeButton);
+
+            this._contentBox.add_child(this._completedRow);
+
+            // PopupMenu for mode selection
+            this._completedMenu = new PopupMenu.PopupMenu(
+                this._completedModeButton,
+                0.5,
+                St.Side.BOTTOM
+            );
+            Main.uiGroup.add_child(this._completedMenu.actor);
+            this._completedMenu.actor.hide();
+            const completedPlaceholder = new PopupMenu.PopupMenuItem('placeholder');
+            this._completedMenu.addMenuItem(completedPlaceholder);
+
+            this._completedModeButton.connect('clicked', () =>
+                this._completedMenu.toggle()
+            );
+
+            this._completedMenu.connect('open-state-changed', (_menu, open) => {
+                if (open) this._onCompletedMenuOpen();
+            });
+
+            const completedManager = new PopupMenu.PopupMenuManager(
+                this._completedModeButton
+            );
+            completedManager.addMenu(this._completedMenu);
+
+            // GSettings listener for prefs sync
+            this._settingsCompletedId = this._settings.connect(
+                'changed::hide-completed-tasks',
+                () => {
+                    const mode = this._settings.get_int('hide-completed-tasks');
+                    this._completedModeLabel.set_text(COMPLETED_MODE_LABELS[mode]);
+                    // Task refresh handled by existing blanket 'changed' listener
+                }
+            );
+        }
+
+        /**
+         * Populates the completed-tasks mode popup menu with 4 options.
+         */
+        _onCompletedMenuOpen() {
+            this._completedMenu.removeAll();
+
+            const currentMode = this._settings.get_int('hide-completed-tasks');
+
+            const modes = [
+                { value: 0, label: _('Never') },
+                { value: 1, label: _('Immediately') },
+                { value: 2, label: _('After a period of time after completion') },
+                { value: 3, label: _('After a specific time of the day') },
+            ];
+
+            for (const mode of modes) {
+                const item = new PopupMenu.PopupMenuItem(mode.label);
+                item.setOrnament(
+                    mode.value === currentMode
+                        ? PopupMenu.Ornament.DOT
+                        : PopupMenu.Ornament.NONE
+                );
+                item.connect('activate', () => {
+                    this._settings.set_int('hide-completed-tasks', mode.value);
+                    this._completedModeLabel.set_text(mode.label);
+                    this._showActiveTaskList(this._activeTaskList);
+                });
+                this._completedMenu.addMenuItem(item);
+            }
         }
 
         /**
@@ -1904,6 +2028,16 @@ const Docket = GObject.registerClass(
                         this._settings.disconnect(this._settingsFilterId);
                         this._settingsFilterId = 0;
                     }
+                    if (this._completedMenu) {
+                        if (this._completedMenu.actor.get_parent() === Main.uiGroup)
+                            Main.uiGroup.remove_child(this._completedMenu.actor);
+                        this._completedMenu.destroy();
+                        this._completedMenu = null;
+                    }
+                    if (this._settingsCompletedId) {
+                        this._settings.disconnect(this._settingsCompletedId);
+                        this._settingsCompletedId = 0;
+                    }
                     if (this._contentBox) {
                         this._contentBox.destroy();
                         this._contentBox = null;
@@ -2371,6 +2505,18 @@ const Docket = GObject.registerClass(
             if (this._settingsFilterId) {
                 this._settings.disconnect(this._settingsFilterId);
                 this._settingsFilterId = 0;
+            }
+
+            if (this._completedMenu) {
+                if (this._completedMenu.actor.get_parent() === Main.uiGroup)
+                    Main.uiGroup.remove_child(this._completedMenu.actor);
+                this._completedMenu.destroy();
+                this._completedMenu = null;
+            }
+
+            if (this._settingsCompletedId) {
+                this._settings.disconnect(this._settingsCompletedId);
+                this._settingsCompletedId = 0;
             }
 
             if (this._themeChangedId) {
