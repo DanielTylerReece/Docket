@@ -85,10 +85,11 @@ export class SyncEngine {
      * Create a task and update cache.
      * @param {string} listId
      * @param {string} title
+     * @param {object} [opts] - Optional fields (dueDateTime, importance, etc.)
      * @returns {Promise<object>} Created task (internal model)
      */
-    async createTask(listId, title) {
-        const payload = TaskModel.toCreatePayload(title);
+    async createTask(listId, title, opts = {}) {
+        const payload = TaskModel.toCreatePayload(title, opts);
         const task = await this._api.createTask(listId, payload);
         const tasks = this._tasks.get(listId) || [];
         tasks.push(task);

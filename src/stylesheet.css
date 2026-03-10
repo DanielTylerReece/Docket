@@ -67,3 +67,62 @@
 .task-widget-column .task-list-name:rtl {
   padding: 0 0 0 5px;
 }
+
+/* Quick-add date picker button */
+.task-widget-column .quick-add-date-button {
+  padding: 4px 8px;
+  border-radius: 6px;
+  min-width: 32px;
+}
+
+.task-widget-column .quick-add-date-button:active {
+  background-color: rgba(53, 132, 228, 0.5);
+}
+
+/* Inline calendar picker */
+.task-widget-column .quick-add-calendar {
+  margin: 0 8px 4px 8px;
+  padding: 8px;
+  border-radius: 6px;
+  background-color: rgba(255, 255, 255, 0.05);
+  spacing: 2px;
+}
+
+.task-widget-column .quick-add-calendar-dow {
+  font-weight: bold;
+  font-size: 0.8em;
+  color: rgba(255, 255, 255, 0.5);
+  padding: 2px 0;
+}
+
+.task-widget-column .quick-add-calendar-day {
+  min-width: 28px;
+  min-height: 28px;
+  border-radius: 14px;
+  font-size: 0.85em;
+  padding: 0;
+  text-align: center;
+}
+
+.task-widget-column .quick-add-calendar-day:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.task-widget-column .quick-add-calendar-day:active {
+  background-color: rgba(53, 132, 228, 0.7);
+  color: white;
+}
+
+.task-widget-column .quick-add-calendar-day-other {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.task-widget-column .quick-add-calendar-day-today {
+  font-weight: bold;
+  border: 1px solid rgba(53, 132, 228, 0.6);
+}
+
+.task-widget-column .quick-add-calendar-action {
+  font-size: 0.85em;
+  padding: 4px 8px;
+}

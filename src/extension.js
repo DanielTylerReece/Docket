@@ -386,15 +386,36 @@ const TaskWidget = GObject.registerClass(
         }
 
         /**
-         * Builds a quick-add entry for creating new tasks.
+         * Builds a quick-add entry with a date picker button.
          */
         _buildQuickAddEntry() {
+            this._quickAddDueDate = null;
+
+            this._quickAddRow = new St.BoxLayout({
+                x_expand: true,
+                style: 'margin: 4px 8px; spacing: 4px;',
+            });
+
+            this._datePickerButton = new St.Button({
+                style_class: 'quick-add-date-button',
+                can_focus: true,
+                child: new St.Icon({
+                    icon_name: 'x-office-calendar-symbolic',
+                    icon_size: 16,
+                }),
+            });
+
+            this._datePickerButton.connect(
+                'clicked',
+                this._toggleCalendarPicker.bind(this)
+            );
+
             this._quickAddEntry = new St.Entry({
                 style_class: 'quick-add-entry',
                 hint_text: _('Add a task…'),
                 can_focus: true,
                 x_expand: true,
-                style: 'margin: 4px 8px; padding: 4px 8px; border-radius: 6px;'
+                style: 'padding: 4px 8px; border-radius: 6px;',
             });
 
             this._quickAddEntry.clutter_text.connect(
@@ -402,12 +423,272 @@ const TaskWidget = GObject.registerClass(
                 this._onQuickAddActivate.bind(this)
             );
 
-            this._contentBox.add_child(this._quickAddEntry);
+            this._quickAddRow.add_child(this._datePickerButton);
+            this._quickAddRow.add_child(this._quickAddEntry);
+            this._contentBox.add_child(this._quickAddRow);
+
+            this._buildCalendarPicker();
+        }
+
+        /**
+         * Builds the inline calendar picker (hidden by default).
+         */
+        _buildCalendarPicker() {
+            this._calendarViewDate = new Date();
+
+            this._calendarPicker = new St.BoxLayout({
+                orientation: Clutter.Orientation.VERTICAL,
+                visible: false,
+                style_class: 'quick-add-calendar',
+            });
+
+            // Navigation: < Month Year >
+            const navRow = new St.BoxLayout({x_expand: true});
+
+            const prevBtn = new St.Button({
+                style_class: 'calendar-change-month-back pager-button',
+                can_focus: true,
+                child: new St.Icon({icon_name: 'pan-start-symbolic'}),
+            });
+            prevBtn.connect('clicked', () => this._navigateCalendar(-1));
+
+            this._calMonthLabel = new St.Label({
+                x_expand: true,
+                x_align: Clutter.ActorAlign.CENTER,
+                y_align: Clutter.ActorAlign.CENTER,
+                style: 'font-weight: bold;',
+            });
+
+            const nextBtn = new St.Button({
+                style_class: 'calendar-change-month-forward pager-button',
+                can_focus: true,
+                child: new St.Icon({icon_name: 'pan-end-symbolic'}),
+            });
+            nextBtn.connect('clicked', () => this._navigateCalendar(1));
+
+            navRow.add_child(prevBtn);
+            navRow.add_child(this._calMonthLabel);
+            navRow.add_child(nextBtn);
+            this._calendarPicker.add_child(navRow);
+
+            // Day-of-week header
+            const dowRow = new St.BoxLayout({x_expand: true});
+            const dayNames = [
+                NC_('day abbreviation', 'Su'),
+                NC_('day abbreviation', 'Mo'),
+                NC_('day abbreviation', 'Tu'),
+                NC_('day abbreviation', 'We'),
+                NC_('day abbreviation', 'Th'),
+                NC_('day abbreviation', 'Fr'),
+                NC_('day abbreviation', 'Sa'),
+            ];
+            for (const d of dayNames) {
+                dowRow.add_child(new St.Label({
+                    text: d,
+                    x_expand: true,
+                    x_align: Clutter.ActorAlign.CENTER,
+                    style_class: 'quick-add-calendar-dow',
+                }));
+            }
+            this._calendarPicker.add_child(dowRow);
+
+            // 6 rows x 7 day buttons
+            this._dayButtons = [];
+            for (let w = 0; w < 6; w++) {
+                const weekRow = new St.BoxLayout({x_expand: true});
+                for (let d = 0; d < 7; d++) {
+                    const btn = new St.Button({
+                        x_expand: true,
+                        can_focus: true,
+                        style_class: 'quick-add-calendar-day',
+                    });
+                    btn.connect('clicked',
+                        this._onCalendarDayClicked.bind(this, w * 7 + d));
+                    weekRow.add_child(btn);
+                    this._dayButtons.push(btn);
+                }
+                this._calendarPicker.add_child(weekRow);
+            }
+
+            // Bottom row: Today / Clear
+            const bottomRow = new St.BoxLayout({
+                x_expand: true,
+                style: 'spacing: 8px; margin-top: 4px;',
+            });
+
+            const todayBtn = new St.Button({
+                label: _('Today'),
+                style_class: 'quick-add-calendar-action button',
+                can_focus: true,
+                x_expand: true,
+            });
+            todayBtn.connect('clicked', () => {
+                const d = new Date();
+                d.setHours(0, 0, 0, 0);
+                this._quickAddDueDate = d;
+                this._updateDateButtonLabel();
+                this._calendarPicker.visible = false;
+            });
+
+            const clearBtn = new St.Button({
+                label: _('Clear'),
+                style_class: 'quick-add-calendar-action button',
+                can_focus: true,
+                x_expand: true,
+            });
+            clearBtn.connect('clicked', () => {
+                this._quickAddDueDate = null;
+                this._updateDateButtonLabel();
+                this._calendarPicker.visible = false;
+            });
+
+            bottomRow.add_child(todayBtn);
+            bottomRow.add_child(clearBtn);
+            this._calendarPicker.add_child(bottomRow);
+
+            this._contentBox.add_child(this._calendarPicker);
+            this._updateCalendarGrid();
+        }
+
+        /**
+         * Toggle calendar picker visibility.
+         */
+        _toggleCalendarPicker() {
+            this._calendarPicker.visible = !this._calendarPicker.visible;
+            if (this._calendarPicker.visible) {
+                this._calendarViewDate = this._quickAddDueDate
+                    ? new Date(this._quickAddDueDate)
+                    : new Date();
+                this._updateCalendarGrid();
+            }
+        }
+
+        /**
+         * Navigate the calendar by +/- months.
+         */
+        _navigateCalendar(delta) {
+            this._calendarViewDate.setMonth(
+                this._calendarViewDate.getMonth() + delta
+            );
+            this._updateCalendarGrid();
+        }
+
+        /**
+         * Redraw the calendar grid for the current view month.
+         */
+        _updateCalendarGrid() {
+            const vd = this._calendarViewDate;
+            const year = vd.getFullYear();
+            const month = vd.getMonth();
+
+            const monthNames = [
+                _('January'), _('February'), _('March'), _('April'),
+                _('May'), _('June'), _('July'), _('August'),
+                _('September'), _('October'), _('November'), _('December'),
+            ];
+            this._calMonthLabel.text = `${monthNames[month]} ${year}`;
+
+            const firstDay = new Date(year, month, 1).getDay();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            const daysInPrev = new Date(year, month, 0).getDate();
+
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            for (let i = 0; i < 42; i++) {
+                const btn = this._dayButtons[i];
+                let dayNum, isCurrentMonth;
+
+                if (i < firstDay) {
+                    dayNum = daysInPrev - firstDay + i + 1;
+                    isCurrentMonth = false;
+                } else if (i >= firstDay + daysInMonth) {
+                    dayNum = i - firstDay - daysInMonth + 1;
+                    isCurrentMonth = false;
+                } else {
+                    dayNum = i - firstDay + 1;
+                    isCurrentMonth = true;
+                }
+
+                btn.label = `${dayNum}`;
+                btn.remove_style_pseudo_class('active');
+                btn.style_class = 'quick-add-calendar-day';
+
+                if (!isCurrentMonth) {
+                    btn.add_style_class_name('quick-add-calendar-day-other');
+                }
+
+                // Highlight today
+                if (isCurrentMonth &&
+                    today.getFullYear() === year &&
+                    today.getMonth() === month &&
+                    today.getDate() === dayNum) {
+                    btn.add_style_class_name('quick-add-calendar-day-today');
+                }
+
+                // Highlight selected date
+                if (this._quickAddDueDate && isCurrentMonth &&
+                    this._quickAddDueDate.getFullYear() === year &&
+                    this._quickAddDueDate.getMonth() === month &&
+                    this._quickAddDueDate.getDate() === dayNum) {
+                    btn.add_style_pseudo_class('active');
+                }
+            }
+        }
+
+        /**
+         * Handle clicking a day in the calendar grid.
+         */
+        _onCalendarDayClicked(index) {
+            const vd = this._calendarViewDate;
+            const year = vd.getFullYear();
+            const month = vd.getMonth();
+            const firstDay = new Date(year, month, 1).getDay();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+            let date;
+            if (index < firstDay) {
+                const prevMonth = new Date(year, month, 0);
+                date = new Date(prevMonth.getFullYear(), prevMonth.getMonth(),
+                    prevMonth.getDate() - firstDay + index + 1);
+            } else if (index >= firstDay + daysInMonth) {
+                date = new Date(year, month + 1,
+                    index - firstDay - daysInMonth + 1);
+            } else {
+                date = new Date(year, month, index - firstDay + 1);
+            }
+
+            date.setHours(0, 0, 0, 0);
+            this._quickAddDueDate = date;
+            this._updateDateButtonLabel();
+            this._calendarPicker.visible = false;
+        }
+
+        /**
+         * Update the date picker button to show the selected date or icon.
+         */
+        _updateDateButtonLabel() {
+            if (this._quickAddDueDate) {
+                const d = this._quickAddDueDate;
+                const label = formatDateWithCFormatString(d, '%b %-d');
+                this._datePickerButton.child = new St.Label({
+                    text: label,
+                    y_align: Clutter.ActorAlign.CENTER,
+                    style: 'font-size: 0.85em;',
+                });
+                this._datePickerButton.add_style_pseudo_class('active');
+            } else {
+                this._datePickerButton.child = new St.Icon({
+                    icon_name: 'x-office-calendar-symbolic',
+                    icon_size: 16,
+                });
+                this._datePickerButton.remove_style_pseudo_class('active');
+            }
         }
 
         /**
          * Handles the Enter key press on the quick-add entry.
-         * Creates a new VTODO task in the active task list.
+         * Creates a new task in the active task list.
          *
          * @async
          */
@@ -421,9 +702,15 @@ const TaskWidget = GObject.registerClass(
 
                 if (!taskList || !this._syncEngine) return;
 
-                await this._syncEngine.createTask(taskList.uid, text);
+                const opts = {};
+                if (this._quickAddDueDate)
+                    opts.dueDateTime = this._quickAddDueDate;
+
+                await this._syncEngine.createTask(taskList.uid, text, opts);
 
                 this._quickAddEntry.set_text('');
+                this._quickAddDueDate = null;
+                this._updateDateButtonLabel();
 
                 this._resetTaskBox(true);
                 this._showActiveTaskList(this._activeTaskList);
