@@ -18,14 +18,14 @@ import {
     gettext as _
 } from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
-let HAS_EDS = true;
-let EDataServer, ECal;
+let HAS_GRAPH = true;
+let AuthManager, GraphApi;
 
 try {
-    EDataServer = (await import('gi://EDataServer')).default;
-    ECal = (await import('gi://ECal')).default;
+    ({ AuthManager } = await import('./auth.js'));
+    ({ GraphApi } = await import('./graph-api.js'));
 } catch (e) {
-    HAS_EDS = false;
+    HAS_GRAPH = false;
 }
 
 /**
@@ -64,16 +64,16 @@ _loadResource();
 
 export default class TaskWidgetExtensionPreferences extends ExtensionPreferences {
     /**
-     * Displays the preferences window if Evolution Data Server and required
-     * dependencies are installed. Otherwise, an instance of `BeGoneWidget`
-     * is shown.
+     * Displays the preferences window if Microsoft Graph API dependencies
+     * (Soup3, libsecret) are installed. Otherwise, an instance of
+     * `BeGoneWidget` is shown.
      *
      * @param {Adw.PreferencesWindow} window - The preferences window.
      */
     fillPreferencesWindow(window) {
         _loadResource();
 
-        const widget = HAS_EDS
+        const widget = HAS_GRAPH
             ? new TaskWidgetSettings(this.getSettings(), this.metadata)
             : new BeGoneWidget(this.metadata);
 
@@ -99,8 +99,8 @@ const BeGoneWidget = GObject.registerClass(
                     buttons: Gtk.ButtonsType.CLOSE,
                     text: _('Error: Missing Dependencies'),
                     secondary_text: _(
-                        'Please install Evolution Data' +
-                            ' Server to use this extension.'
+                        'Please install libsoup3 and libsecret' +
+                            ' to use this extension.'
                     )
                 });
 
@@ -173,6 +173,9 @@ const TaskWidgetSettings = GObject.registerClass(
             super._init();
             this._settings = settings;
             this._metadata = metadata;
+            this._authManager = null;
+            this._api = null;
+            this._authGroup = null;
             const provider = new Gtk.CssProvider();
             provider.load_from_resource(`${this._metadata.epath}/prefs.css`);
 
@@ -283,7 +286,7 @@ const TaskWidgetSettings = GObject.registerClass(
                 )
             );
 
-            this._listTaskListsAndAccounts();
+            this._initAuth();
         }
 
         /**
@@ -390,260 +393,253 @@ const TaskWidgetSettings = GObject.registerClass(
         }
 
         /**
-         * Lists task lists and accounts of remote task lists.
+         * Initializes authentication and loads task lists if authenticated.
          *
          * @async
-         * @param {boolean} [accountsOnly] - Only refresh the account list.
          */
-        async _listTaskListsAndAccounts(accountsOnly = false) {
+        async _initAuth() {
             try {
-                if (!accountsOnly) await this._initRegistry();
+                this._authManager = new AuthManager();
+                await this._authManager.loadTokens();
+                this._api = new GraphApi(this._authManager);
+                this._buildAuthSection();
 
-                const accounts = new Map();
+                if (this._authManager.isAuthenticated())
+                    await this._loadTaskLists();
+            } catch (e) {
+                console.error(`[prefs] Init error: ${e.message}`);
+                if (!this._authGroup)
+                    this._buildAuthSection();
+            }
+        }
 
-                for (const [, client] of this._clients) {
-                    const remote = client.check_refresh_supported();
+        /**
+         * Builds the Microsoft Account auth section.
+         */
+        _buildAuthSection() {
+            const authGroup = new Adw.PreferencesGroup({
+                title: _('Microsoft Account'),
+            });
 
-                    if (remote) {
-                        // Account name (usually an email address):
-                        const account = this._sourceRegistry.ref_source(
-                            client.source.get_parent()
-                        ).display_name;
+            if (this._authManager && this._authManager.isAuthenticated()) {
+                const statusRow = new Adw.ActionRow({
+                    title: _('Signed in'),
+                    subtitle: _('Connected to Microsoft To Do'),
+                });
 
-                        // Keep an object of unique accounts:
-                        if (!accounts.get(account)) {
-                            accounts.set(
-                                account,
-                                this._sourceRegistry.ref_source(
-                                    client.source.get_parent()
-                                )
-                            );
-                        }
-                    }
+                const signOutBtn = new Gtk.Button({
+                    label: _('Sign Out'),
+                    valign: Gtk.Align.CENTER,
+                });
+                signOutBtn.add_css_class('destructive-action');
+                signOutBtn.connect('clicked', () => this._onSignOut());
+                statusRow.add_suffix(signOutBtn);
+                authGroup.add(statusRow);
+            } else {
+                const signInRow = new Adw.ActionRow({
+                    title: _('Not signed in'),
+                    subtitle: _('Sign in to sync with Microsoft To Do'),
+                });
 
-                    if (accountsOnly) continue;
+                const signInBtn = new Gtk.Button({
+                    label: _('Sign In'),
+                    valign: Gtk.Align.CENTER,
+                });
+                signInBtn.add_css_class('suggested-action');
+                signInBtn.connect('clicked', () => this._onSignIn());
+                signInRow.add_suffix(signInBtn);
+                authGroup.add(signInRow);
+            }
 
-                    const taskListRow = new TaskListRow(client, remote, this);
+            this._authGroup = authGroup;
+            this.add(authGroup);
+        }
+
+        /**
+         * Handles the sign-in flow using device code grant.
+         *
+         * @async
+         */
+        async _onSignIn() {
+            try {
+                const flow = await this._authManager.startDeviceCodeFlow();
+
+                // Copy code to clipboard and open browser
+                const clipboard = Gdk.Display.get_default().get_clipboard();
+                clipboard.set(flow.userCode);
+
+                Gio.AppInfo.launch_default_for_uri_async(
+                    flow.verificationUri, null, null, null
+                );
+
+                // Update auth section to show waiting state
+                this.remove(this._authGroup);
+
+                const authGroup = new Adw.PreferencesGroup({
+                    title: _('Microsoft Account'),
+                });
+                const waitRow = new Adw.ActionRow({
+                    title: _('Waiting for approval') + Utils.ELLIPSIS_CHAR_,
+                    subtitle: `${_('Code:')} ${flow.userCode} \u2014 ${_('copied to clipboard')}`,
+                });
+
+                const cancelBtn = new Gtk.Button({
+                    label: _('Cancel'),
+                    valign: Gtk.Align.CENTER,
+                });
+                cancelBtn.add_css_class('destructive-action');
+                cancelBtn.connect('clicked', () => {
+                    this._authManager.destroy();
+                    this._authManager = new AuthManager();
+                    this._api = new GraphApi(this._authManager);
+                    this.remove(authGroup);
+                    this._buildAuthSection();
+                });
+                waitRow.add_suffix(cancelBtn);
+                authGroup.add(waitRow);
+                this._authGroup = authGroup;
+                this.add(authGroup);
+
+                // Wait for poll completion
+                await flow.pollPromise;
+
+                // Success — rebuild auth section and load task lists
+                this.remove(this._authGroup);
+                this._buildAuthSection();
+                await this._loadTaskLists();
+            } catch (e) {
+                if (e.message === 'destroyed') return;
+                console.error(`[prefs] Sign in error: ${e.message}`);
+                if (this._authGroup) {
+                    this.remove(this._authGroup);
+                    this._authGroup = null;
+                }
+                this._buildAuthSection();
+            }
+        }
+
+        /**
+         * Handles sign-out: clears tokens and resets the UI.
+         *
+         * @async
+         */
+        async _onSignOut() {
+            try {
+                await this._authManager.clearTokens();
+
+                // Clear task list rows
+                let row = this._taskListBox.get_row_at_index(0);
+                while (row) {
+                    this._taskListBox.remove(row);
+                    row = this._taskListBox.get_row_at_index(0);
+                }
+
+                // Rebuild auth section
+                this.remove(this._authGroup);
+                this._authGroup = null;
+                this._buildAuthSection();
+
+                // Disable refresh button
+                this._backendRefreshButton.set_sensitive(false);
+                this._backendRefreshButton.set_tooltip_text(
+                    _('Sign in to view task lists')
+                );
+            } catch (e) {
+                console.error(`[prefs] Sign out error: ${e.message}`);
+            }
+        }
+
+        /**
+         * Fetches task lists from Microsoft Graph API and populates the UI.
+         *
+         * @async
+         */
+        async _loadTaskLists() {
+            try {
+                const lists = await this._api.listTaskLists();
+                const customOrder = this._settings.get_strv('task-list-order');
+
+                if (customOrder.length) {
+                    lists.sort((a, b) => {
+                        const ia = customOrder.indexOf(a.id);
+                        const ib = customOrder.indexOf(b.id);
+                        if (ia === -1 && ib === -1) return 0;
+                        if (ia === -1) return 1;
+                        if (ib === -1) return -1;
+                        return ia - ib;
+                    });
+                }
+
+                // Clear existing rows
+                let row = this._taskListBox.get_row_at_index(0);
+                while (row) {
+                    this._taskListBox.remove(row);
+                    row = this._taskListBox.get_row_at_index(0);
+                }
+
+                // Add rows
+                for (const list of lists) {
+                    const taskListRow = new TaskListRow(list, this);
                     this._taskListBox.append(taskListRow);
                 }
 
-                if (!accounts.size) {
-                    this._backendRefreshButton.set_sensitive(false);
+                // Configure refresh button
+                this._backendRefreshButton.set_sensitive(true);
+                this._backendRefreshButton.set_tooltip_text(
+                    _('Reload task lists')
+                );
 
-                    this._backendRefreshButton.set_tooltip_text(
-                        _('No remote task lists found')
-                    );
-                } else {
-                    this._backendRefreshButton.set_tooltip_text(
-                        _('Refresh the list of account task lists')
-                    );
+                const menu = Gio.Menu.new();
+                menu.append(_('Reload Task Lists'), 'refresh.reload');
+                const actionGroup = new Gio.SimpleActionGroup();
+                const action = new Gio.SimpleAction({ name: 'reload' });
+                action.connect('activate', () => this._onReloadLists());
+                actionGroup.add_action(action);
+                this._backendRefreshButton.set_menu_model(menu);
+                this._backendRefreshButton.insert_action_group(
+                    'refresh',
+                    actionGroup
+                );
+            } catch (e) {
+                console.error(`[prefs] Load task lists error: ${e.message}`);
 
-                    let i = 0;
-                    let action;
-                    const menu = Gio.Menu.new();
-                    const actionGroup = new Gio.SimpleActionGroup();
-
-                    // Here we use a simple integer-based naming convention to
-                    // override true account names that may containt special
-                    // characters and cause issues:
-                    for (const [account, source] of accounts) {
-                        menu.append(account, `accounts.${i}`);
-                        action = new Gio.SimpleAction({ name: `${i}` });
-
-                        action.connect('activate', () =>
-                            this._onAccountButtonClicked(source, account)
-                        );
-
-                        actionGroup.add_action(action);
-                        i++;
-                    }
-
-                    this._backendRefreshButton.set_menu_model(menu);
-
-                    this._backendRefreshButton.insert_action_group(
-                        'accounts',
-                        actionGroup
-                    );
+                if (e.message === 'auth-required') {
+                    this.remove(this._authGroup);
+                    this._authGroup = null;
+                    this._buildAuthSection();
                 }
-            } catch (e) {
-                logError(e);
+
+                this._backendRefreshButton.set_sensitive(false);
+                this._backendRefreshButton.set_tooltip_text(
+                    _('Could not load task lists')
+                );
             }
         }
 
         /**
-         * Initializes the source registry.
+         * Reloads the task list from Graph API.
          *
          * @async
          */
-        async _initRegistry() {
+        async _onReloadLists() {
             try {
-                const sourceType = EDataServer.SOURCE_EXTENSION_TASK_LIST;
-                this._sourceRegistry = await Utils.getSourceRegistry_();
-                const customOrder = this._settings.get_strv('task-list-order');
-
-                const customSort = customOrder.length
-                    ? Utils.customSort_.bind(this, customOrder)
-                    : undefined;
-
-                const sources = this._sourceRegistry
-                    .list_sources(sourceType)
-                    .sort(customSort);
-
-                const clients = await Promise.all(
-                    sources.map((source) =>
-                        Utils.getECalClient_(
-                            source,
-                            ECal.ClientSourceType.TASKS,
-                            1,
-                            null
-                        )
-                    )
-                );
-
-                this._clients = new Map(
-                    clients.map((client) => [client.source.uid, client])
-                );
-
-                this._taskListAddedId = this._sourceRegistry.connect(
-                    'source-added',
-                    (_self, source) => {
-                        if (source.has_extension(sourceType))
-                            this._onTaskListEvent('added', source);
-                    }
-                );
-
-                this._taskListRemovedId = this._sourceRegistry.connect(
-                    'source-removed',
-                    (_self, source) => {
-                        if (source.has_extension(sourceType))
-                            this._onTaskListEvent('removed', source);
-                    }
-                );
-
-                this._taskListChangedId = this._sourceRegistry.connect(
-                    'source-changed',
-                    (_self, source) => {
-                        if (source.has_extension(sourceType))
-                            this._onTaskListEvent('changed', source);
-                    }
-                );
-            } catch (e) {
-                logError(e);
-            }
-        }
-
-        /**
-         * Handles account button click events.
-         *
-         * @async
-         * @param {EDataServer.SourceCollection} source - Account data source.
-         * @param {string} account - Account name.
-         */
-        async _onAccountButtonClicked(source, account) {
-            try {
-                const extension = EDataServer.SOURCE_EXTENSION_COLLECTION;
-
-                if (!source.has_extension(extension))
-                    throw new Error(`${account} is not refreshable`);
-
-                // Refresh list of account task lists:
-                if (
-                    !(await Utils.refreshBackend_(
-                        this._sourceRegistry,
-                        source.uid,
-                        null
-                    ))
-                )
-                    throw new Error(`${account} could not be refreshed`);
-
-                this._backendRefreshButtonSpinner.set_tooltip_text(
-                    _('Refresh in progress') + Utils.ELLIPSIS_CHAR_
-                );
-
                 this._backendRefreshButton.set_visible(false);
                 this._backendRefreshButtonSpinner.set_visible(true);
-
-                this._backendRefreshId = GLib.timeout_add_seconds(
-                    GLib.PRIORITY_DEFAULT,
-                    5,
-                    () => {
-                        this._backendRefreshButton.set_visible(true);
-                        this._backendRefreshButtonSpinner.set_visible(false);
-                        delete this._backendRefreshId;
-                        return GLib.SOURCE_REMOVE;
-                    }
+                this._backendRefreshButtonSpinner.set_tooltip_text(
+                    _('Reloading') + Utils.ELLIPSIS_CHAR_
                 );
+
+                await this._loadTaskLists();
+
+                GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 1, () => {
+                    this._backendRefreshButton.set_visible(true);
+                    this._backendRefreshButtonSpinner.set_visible(false);
+                    return GLib.SOURCE_REMOVE;
+                });
             } catch (e) {
-                logError(e);
-            }
-        }
-
-        /**
-         * Handles task list events (additions, removals and changes).
-         *
-         * @async
-         * @param {string} event - Type of event.
-         * @param {EDataServer.Source} source - Associated data source.
-         */
-        async _onTaskListEvent(event, source) {
-            try {
-                let i = 0;
-                let row = this._taskListBox.get_row_at_index(i);
-
-                switch (event) {
-                    case 'added': {
-                        const client = await Utils.getECalClient_(
-                            source,
-                            ECal.ClientSourceType.TASKS,
-                            1,
-                            null
-                        );
-
-                        this._clients.set(source.uid, client);
-
-                        const taskListRow = new TaskListRow(
-                            client,
-                            client.check_refresh_supported(),
-                            this
-                        );
-
-                        this._taskListBox.append(taskListRow);
-
-                        break;
-                    }
-
-                    case 'removed': {
-                        this._clients.delete(source.uid);
-
-                        while (row) {
-                            if (row._uid === source.uid) {
-                                this._taskListBox.remove(row);
-
-                                break;
-                            }
-
-                            row = this._taskListBox.get_row_at_index(i++);
-                        }
-
-                        break;
-                    }
-
-                    case 'changed': {
-                        while (row) {
-                            if (row._uid === source.uid) {
-                                row.set_title(source.display_name);
-                                break;
-                            }
-
-                            row = this._taskListBox.get_row_at_index(i++);
-                        }
-                    }
-                }
-
-                // Refresh the list of accounts:
-                this._listTaskListsAndAccounts(true);
-            } catch (e) {
-                logError(e);
+                console.error(`[prefs] Reload error: ${e.message}`);
+                this._backendRefreshButton.set_visible(true);
+                this._backendRefreshButtonSpinner.set_visible(false);
             }
         }
 
@@ -665,17 +661,11 @@ const TaskWidgetSettings = GObject.registerClass(
          * window gets destroyed.
          */
         _onUnrealized() {
-            if (this._taskListAddedId)
-                this._sourceRegistry.disconnect(this._taskListAddedId);
+            if (this._authManager)
+                this._authManager.destroy();
 
-            if (this._taskListRemovedId)
-                this._sourceRegistry.disconnect(this._taskListRemovedId);
-
-            if (this._taskListChangedId)
-                this._sourceRegistry.disconnect(this._taskListChangedId);
-
-            if (this._backendRefreshId)
-                GLib.source_remove(this._backendRefreshId);
+            if (this._api)
+                this._api.destroy();
 
             Gio.resources_unregister(_resource);
             _resource = null;
@@ -717,27 +707,22 @@ const TaskListRow = GObject.registerClass(
         /**
          * Initializes a task list row.
          *
-         * @param {ECal.Client} client - `ECal.Client` of the task list.
-         * @param {boolean} remote - It's a remote task list.
+         * @param {object} list - Task list object with {id, displayName}.
          * @param {TaskWidgetSettings} widget - Reference to the main widget
          * class.
          */
-        _init(client, remote, widget) {
+        _init(list, widget) {
             super._init();
-            this._source = client.source;
             this._settings = widget._settings;
-            this._uid = this._source.uid;
-            this.set_title(this._source.display_name);
+            this._uid = list.id;
+            this.set_title(list.displayName);
 
-            this._taskListProvider.set_text(
-                widget._sourceRegistry.ref_source(this._source.get_parent())
-                    .display_name
-            );
+            this._taskListProvider.set_text('Microsoft To Do');
 
             this._taskListSwitch.active =
                 this._settings
                     .get_strv('disabled-task-lists')
-                    .indexOf(this._source.uid) === -1;
+                    .indexOf(this._uid) === -1;
 
             let action;
             const actionGroup = new Gio.SimpleActionGroup();
@@ -747,27 +732,6 @@ const TaskListRow = GObject.registerClass(
             action = new Gio.SimpleAction({ name: 'down' });
             action.connect('activate', () => this._moveRow(false));
             actionGroup.add_action(action);
-
-            if (remote) {
-                const menu = this._taskListOptionsButton.menu_model;
-                menu.append(_('Refresh Tasks'), 'options-menu.refresh');
-                action = new Gio.SimpleAction({ name: 'refresh' });
-
-                action.connect('activate', () =>
-                    this._onRefreshButtonClicked(client)
-                );
-
-                actionGroup.add_action(action);
-                menu.append(_('Properties'), 'options-menu.properties');
-                action = new Gio.SimpleAction({ name: 'properties' });
-
-                action.connect('activate', () =>
-                    new TaskListPropertiesDialog(widget, this._source).present()
-                );
-
-                actionGroup.add_action(action);
-                this._taskListOptionsButton.set_menu_model(menu);
-            }
 
             this._taskListOptionsButton.insert_action_group(
                 'options-menu',
@@ -792,35 +756,6 @@ const TaskListRow = GObject.registerClass(
             else cursor = reactive ? 'grab' : 'default';
 
             this.get_root().set_cursor(Gdk.Cursor.new_from_name(cursor, null));
-        }
-
-        /**
-         * Updates the task content of the task list when it's `Refresh Tasks`
-         * button gets clicked.
-         *
-         * @async
-         * @param {ECal.Client} client - `ECal.Client` of the task list.
-         */
-        async _onRefreshButtonClicked(client) {
-            try {
-                this._taskListOptionsButton.set_visible(false);
-                this._taskListOptionsSpinner.set_visible(true);
-
-                GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 1, () => {
-                    this._taskListOptionsButton.set_visible(true);
-                    this._taskListOptionsSpinner.set_visible(false);
-                    return GLib.SOURCE_REMOVE;
-                });
-
-                if (!(await Utils.refreshClient_(client, null))) {
-                    throw new Error(
-                        'Cannot refresh the task list: ' +
-                            client.source.display_name
-                    );
-                }
-            } catch (e) {
-                logError(e);
-            }
         }
 
         /**
@@ -908,143 +843,14 @@ const TaskListRow = GObject.registerClass(
             const disabled = this._settings.get_strv('disabled-task-lists');
 
             if (widget.active) {
-                const index = disabled.indexOf(this._source.uid);
+                const index = disabled.indexOf(this._uid);
 
                 if (index !== -1) disabled.splice(index, 1);
             } else {
-                disabled.push(this._source.uid);
+                disabled.push(this._uid);
             }
 
             this._settings.set_strv('disabled-task-lists', disabled);
-        }
-    }
-);
-
-const TaskListPropertiesDialog = GObject.registerClass(
-    {
-        GTypeName: 'TaskListPropertiesDialog',
-        Template:
-            'resource:///org/gnome/shell/extensions/task-widget/task-list-properties-dialog.ui',
-        InternalChildren: [
-            'taskListPropertiesDialogComboBox',
-            'taskListPropertiesDialogSpinButton'
-        ]
-    },
-    class TaskListPropertiesDialog extends Gtk.Dialog {
-        /**
-         * Initializes a dialog for task list properties.
-         *
-         * @param {TaskWidgetSettings} widget - Reference to the main widget
-         * class.
-         * @param {EDataServer.Source} source - Source of the task list.
-         */
-        _init(widget, source) {
-            super._init();
-            this.set_transient_for(widget._window);
-            this._source = source;
-
-            this.set_title(
-                this.get_title() +
-                    ' ' +
-                    Utils.EM_DASH_CHAR_ +
-                    ' ' +
-                    source.display_name
-            );
-
-            this._extension = source.get_extension(
-                EDataServer.SOURCE_EXTENSION_REFRESH
-            );
-
-            let units;
-            let interval = this._extension.interval_minutes;
-
-            if (interval === 0) {
-                units = Utils.TIME_UNITS_['minutes'];
-            } else if (interval % Utils.MINUTES_PER_DAY_ === 0) {
-                interval /= Utils.MINUTES_PER_DAY_;
-                units = Utils.TIME_UNITS_['days'];
-            } else if (interval % Utils.MINUTES_PER_HOUR_ === 0) {
-                interval /= Utils.MINUTES_PER_HOUR_;
-                units = Utils.TIME_UNITS_['hours'];
-            } else {
-                units = Utils.TIME_UNITS_['minutes'];
-            }
-
-            this._taskListPropertiesDialogSpinButton.set_value(interval);
-            this._taskListPropertiesDialogComboBox.set_active_id(`${units}`);
-        }
-
-        /**
-         * Fills Gtk.ComboBox with time units.
-         */
-        _fillTimeUnitComboBox() {
-            const interval = this._taskListPropertiesDialogSpinButton.value;
-
-            const time = new Map([
-                [
-                    Utils.TIME_UNITS_['minutes'],
-                    _npgettext(
-                        'refresh every X minutes(s)',
-                        'minute',
-                        'minutes',
-                        interval
-                    )
-                ],
-                [
-                    Utils.TIME_UNITS_['hours'],
-                    _npgettext(
-                        'refresh every X hour(s)',
-                        'hour',
-                        'hours',
-                        interval
-                    )
-                ],
-                [
-                    Utils.TIME_UNITS_['days'],
-                    _npgettext(
-                        'refresh every X day(s)',
-                        'day',
-                        'days',
-                        interval
-                    )
-                ]
-            ]);
-
-            const active = this._taskListPropertiesDialogComboBox.active_id;
-            this._taskListPropertiesDialogComboBox.remove_all();
-
-            time.forEach((label, i) =>
-                this._taskListPropertiesDialogComboBox.append(`${i}`, label)
-            );
-
-            if (active !== null)
-                this._taskListPropertiesDialogComboBox.set_active_id(active);
-        }
-
-        /**
-         * Handles closing of the dialog.
-         *
-         * @param {Gtk.ResponseType} id - Response type id returned after
-         * closing the dialog.
-         */
-        vfunc_response(id) {
-            if (id === Gtk.ResponseType.OK) {
-                const active = this._taskListPropertiesDialogComboBox.active_id;
-                let interval = this._taskListPropertiesDialogSpinButton.value;
-
-                switch (parseInt(active)) {
-                    case Utils.TIME_UNITS_['hours']:
-                        interval *= Utils.MINUTES_PER_HOUR_;
-                        break;
-                    case Utils.TIME_UNITS_['days']:
-                        interval *= Utils.MINUTES_PER_DAY_;
-                }
-
-                this._extension.set_interval_minutes(interval);
-                this._source.write_sync(null);
-            }
-
-            this.destroy();
         }
     }
 );
