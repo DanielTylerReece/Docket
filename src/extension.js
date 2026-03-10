@@ -1375,6 +1375,31 @@ const Docket = GObject.registerClass(
                 );
             }
 
+            // Add delete button as the first child inside the checkbox layout
+            const deleteBtn = new St.Button({
+                style_class: 'task-delete-button',
+                can_focus: true,
+                child: new St.Icon({
+                    style_class: 'task-delete-icon',
+                    icon_name: 'user-trash-symbolic',
+                    icon_size: 14,
+                }),
+            });
+            deleteBtn.connect('clicked', () => this._onDeleteTask(checkbox));
+            checkbox.child.insert_child_at_index(deleteBtn, 0);
+
+            const editBtn = new St.Button({
+                style_class: 'task-edit-button',
+                can_focus: true,
+                child: new St.Icon({
+                    style_class: 'task-edit-icon',
+                    icon_name: 'document-edit-symbolic',
+                    icon_size: 14,
+                }),
+            });
+            editBtn.connect('clicked', () => this._onEditTask(checkbox));
+            checkbox.child.insert_child_at_index(editBtn, 1);
+
             return checkbox;
         }
 
@@ -1396,7 +1421,7 @@ const Docket = GObject.registerClass(
                 accessible_role: Atk.Role.ARROW
             });
 
-            checkbox.child.insert_child_at_index(indicator, 1);
+            checkbox.child.insert_child_at_index(indicator, 3);
             return checkbox;
         }
 
@@ -1536,7 +1561,7 @@ const Docket = GObject.registerClass(
                 orientation: Clutter.Orientation.VERTICAL
             });
 
-            const subTaskSummary = checkbox.child.get_child_at_index(2);
+            const subTaskSummary = checkbox.child.get_child_at_index(4);
             checkbox.child.remove_child(subTaskSummary);
             box.add_child(this._buildDueDateLabel(due));
 
@@ -1544,7 +1569,7 @@ const Docket = GObject.registerClass(
                 subTaskSummary.set_x_align(Clutter.ActorAlign.START);
 
             box.add_child(subTaskSummary);
-            checkbox.child.insert_child_at_index(box, 2);
+            checkbox.child.insert_child_at_index(box, 4);
             return checkbox;
         }
 
@@ -1926,6 +1951,101 @@ const Docket = GObject.registerClass(
             } catch (e) {
                 logError(e);
             }
+        }
+
+        /**
+         * Handles task delete button clicks. Deletes task via sync engine
+         * and refreshes the task list.
+         *
+         * @async
+         * @param {Checkbox} checkbox - Checkbox whose task should be deleted.
+         */
+        async _onDeleteTask(checkbox) {
+            try {
+                const task = checkbox._task;
+                const listId = task._taskList;
+                await this._syncEngine.deleteTask(listId, task.id);
+                this._showActiveTaskList(this._activeTaskList);
+            } catch (e) {
+                logError(e);
+            }
+        }
+
+        /**
+         * Handles inline editing of a task title.
+         * @param {CheckBox.CheckBox} checkbox - The checkbox whose task to edit.
+         */
+        _onEditTask(checkbox) {
+            const task = checkbox._task;
+            const labelActor = checkbox.getLabelActor();
+
+            // Hide the label, show an entry in its place
+            const originalText = task.title;
+            labelActor.hide();
+
+            const entry = new St.Entry({
+                text: originalText,
+                can_focus: true,
+                x_expand: true,
+                style: 'padding: 2px 4px;',
+            });
+
+            // Insert entry after the label in the checkbox's child BoxLayout
+            const parent = labelActor.get_parent();
+            const labelIndex = parent.get_children().indexOf(labelActor);
+            parent.insert_child_at_index(entry, labelIndex + 1);
+
+            // Focus the entry and select all text
+            entry.grab_key_focus();
+            entry.get_clutter_text().set_selection(0, -1);
+
+            // Cleanup guard — only manipulate widgets if they're still
+            // alive in the widget tree.  If tasks-changed triggers a
+            // tree rebuild while the entry exists, the widgets will
+            // already be destroyed; touching them would hit the
+            // clutter_actor_set_mapped assertion.
+            let cleaned = false;
+            const cleanup = () => {
+                if (cleaned) return;
+                cleaned = true;
+                try {
+                    if (entry && !entry.is_finalized?.() && entry.get_parent()) {
+                        entry.get_parent().remove_child(entry);
+                        entry.destroy();
+                    }
+                    if (labelActor && !labelActor.is_finalized?.()) {
+                        labelActor.show();
+                    }
+                } catch (e) {
+                    // Widget already destroyed by tree rebuild — ignore
+                }
+            };
+
+            // Enter = save — cleanup synchronously, then fire-and-forget
+            // the API call so the entry is gone before any tree rebuild.
+            entry.get_clutter_text().connect('activate', () => {
+                const newTitle = entry.get_text().trim();
+                cleanup();
+                if (newTitle && newTitle !== originalText) {
+                    this._syncEngine.updateTaskTitle(
+                        task._taskList, task.id, newTitle
+                    ).catch(e => logError(e));
+                }
+            });
+
+            // Escape = cancel
+            entry.get_clutter_text().connect('key-press-event', (_actor, event) => {
+                if (event.get_key_symbol() === Clutter.KEY_Escape) {
+                    cleanup();
+                    return Clutter.EVENT_STOP;
+                }
+                return Clutter.EVENT_PROPAGATE;
+            });
+
+            // NO key-focus-out handler — focus loss during widget tree
+            // replacement (tasks-changed → _idleAddHelper) causes the
+            // Clutter unmap assertion crash.  Only explicit user actions
+            // (Enter / Escape) trigger cleanup.
         }
 
         /**

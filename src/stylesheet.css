@@ -126,3 +126,47 @@
   font-size: 0.85em;
   padding: 4px 8px;
 }
+
+.docket-column .task-delete-button {
+    padding: 2px;
+    background-color: transparent;
+    color: rgba(192, 28, 40, 0.7);
+}
+
+.docket-column .task-delete-button:hover {
+    color: rgba(224, 40, 50, 1.0);
+}
+
+.docket-column .task-delete-button:active {
+    color: rgba(255, 60, 60, 1.0);
+}
+
+/* Override .check-box StIcon theme styles that set color: transparent
+   and add a checkbox-style border to ALL descendant StIcons */
+.docket-column .task-delete-icon {
+    color: rgba(192, 28, 40, 0.7) !important;
+    border: none !important;
+    border-radius: 0 !important;
+    background-color: transparent !important;
+}
+
+.docket-column .task-delete-button:hover .task-delete-icon {
+    color: rgba(224, 40, 50, 1.0) !important;
+}
+
+.docket-column .task-delete-button:active .task-delete-icon {
+    color: rgba(255, 60, 60, 1.0) !important;
+}
+
+.docket-column .task-edit-button {
+    padding: 2px;
+    background-color: transparent;
+}
+
+/* Override .check-box StIcon theme that makes icons transparent */
+.docket-column .task-edit-icon {
+    color: inherit !important;
+    border: none !important;
+    border-radius: 0 !important;
+    background-color: transparent !important;
+}

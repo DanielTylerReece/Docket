@@ -153,6 +153,18 @@ export class SyncEngine {
     }
 
     /**
+     * Update a task's title.
+     * @param {string} listId
+     * @param {string} taskId
+     * @param {string} newTitle
+     */
+    async updateTaskTitle(listId, taskId, newTitle) {
+        const updated = await this._api.updateTask(listId, taskId, {title: newTitle});
+        this._updateTaskInCache(listId, updated);
+        this._emit('tasks-changed');
+    }
+
+    /**
      * Delete a task.
      */
     async deleteTask(listId, taskId) {
