@@ -549,14 +549,7 @@ const TaskWidget = GObject.registerClass(
 
             // No task list UID means we have multiple task lists merged:
             if (taskListUid === null) {
-                tasks = [].concat(
-                    ...tasks.map((taskList, i) =>
-                        taskList.map((task) => {
-                            task._taskList = this._taskLists[i].uid;
-                            return task;
-                        })
-                    )
-                );
+                tasks = [].concat(...tasks);
             }
 
             for (const task of tasks.sort(
@@ -567,7 +560,6 @@ const TaskWidget = GObject.registerClass(
             )) {
                 if (!task.title) continue;
 
-                task._taskList = task._taskList ? task._taskList : taskListUid;
                 this._rootTasks.push(task);
 
                 // Map checklistItems as subtasks
