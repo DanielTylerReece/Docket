@@ -126,8 +126,14 @@ const Docket = GObject.registerClass(
                 reactive: true
             });
 
+            this._linkLabel = new St.Label({
+                reactive: true,
+                visible: false
+            });
+
             labeledIconBox.add_child(this._taskIcon);
             labeledIconBox.add_child(this._statusLabel);
+            labeledIconBox.add_child(this._linkLabel);
             this._placeholder.add_child(labeledIconBox);
             this.add_child(this._placeholder);
         }
@@ -1722,38 +1728,42 @@ const Docket = GObject.registerClass(
                     break;
                 case 'missing-dependencies': {
                     this._taskIcon.set_gicon(
-                        Gio.ThemedIcon.new('dialog-error-symbolic')
+                        Gio.ThemedIcon.new('system-users-symbolic')
                     );
 
                     this._statusLabel.set_text(
-                        _('Error: Missing Dependencies')
+                        _('Please Sign In')
                     );
-                    this._statusLabel.add_style_class_name('url-highlighter');
 
-                    this._statusLabel.connect('style-changed', () => {
-                        const [hasColor, color] = this._statusLabel
+                    // Show clickable install guide link
+                    this._linkLabel.set_text(_('Installation Guide'));
+                    this._linkLabel.show();
+                    this._linkLabel.add_style_class_name('url-highlighter');
+
+                    this._linkLabel.connect('style-changed', () => {
+                        const [hasColor, color] = this._linkLabel
                             .get_theme_node()
                             .lookup_color('link-color', false);
 
-                        this._statusLabel.set_style(`color: ${
+                        this._linkLabel.set_style(`color: ${
                             hasColor
                                 ? color.to_string().substr(0, 7)
                                 : '#629fea'
                         };
-                        text-decoration: underline`);
+                        text-decoration: underline; margin-top: 8px;`);
                     });
 
-                    this._statusLabel.connect('motion-event', () => {
+                    this._linkLabel.connect('motion-event', () => {
                         global.display.set_cursor(Meta.Cursor.POINTER);
                         return Clutter.EVENT_PROPAGATE;
                     });
 
-                    this._statusLabel.connect('leave-event', () => {
+                    this._linkLabel.connect('leave-event', () => {
                         global.display.set_cursor(Meta.Cursor.DEFAULT);
                         return Clutter.EVENT_PROPAGATE;
                     });
 
-                    this._statusLabel.connect('button-release-event', () => {
+                    this._linkLabel.connect('button-release-event', () => {
                         Gio.app_info_launch_default_for_uri(
                             this._metadata.dependencies,
                             global.create_app_launch_context(0, -1)
