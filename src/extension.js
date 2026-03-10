@@ -1711,7 +1711,7 @@ const Docket = GObject.registerClass(
                     });
 
                     this._statusLabel.connect('motion-event', () => {
-                        global.display.set_cursor(Meta.Cursor.POINTING_HAND);
+                        global.display.set_cursor(Meta.Cursor.POINTER);
                         return Clutter.EVENT_PROPAGATE;
                     });
 
