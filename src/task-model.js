@@ -41,7 +41,7 @@ export class TaskModel {
                     : null,
             })),
 
-            // Aliases for backward compat with UI code that reads EDS-style properties
+            // Aliases used by UI code
             get _uid() { return this.id; },
             get _due() { return this.dueDateTime; },
             get _taskList() { return this.listId; },

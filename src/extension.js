@@ -488,19 +488,9 @@ const TaskWidget = GObject.registerClass(
         }
 
         /**
-         * Initializes the source registry: defines task lists as desired
-         * source type and connects signal handlers to monitor for task list
-         * additions, removals and changes.
-         *
-         * @async
-         */
-        // _initSourceRegistry removed — replaced by SyncEngine.initialize()
-
-        /**
          * Stores a list of task list data (UIDs and names) for quick access.
          * Task lists are sorted according to user-defined order.
          *
-         * @async
          * @param {boolean} [cleanup] - Cleanup the settings (remove obsolete
          * task list uids).
          */
@@ -532,17 +522,6 @@ const TaskWidget = GObject.registerClass(
                 logError(e);
             }
         }
-
-        /**
-         * Handles task list addition events and connects signal handlers to
-         * monitor for its task additions, removals and changes.
-         *
-         * @async
-         * (Legacy comments from EDS version — these methods are now handled
-         * by SyncEngine signal handlers)
-         */
-        // _onTaskListAdded, _onTaskListRemoved, _onTaskListChanged
-        // replaced by SyncEngine signal handlers set up in _initTaskLists
 
         /**
          * Handles sync engine update events (tasks changed via delta query).
@@ -1148,9 +1127,9 @@ const TaskWidget = GObject.registerClass(
          * Filters tasks and task lists based on user-defined settings.
          *
          * @async
-         * @param {ECal.Client} client - Task list to filter.
+         * @param {string} listId - Task list ID to filter.
          *
-         * @returns {Promise<ECal.Component[]>} List of tasks.
+         * @returns {object[]|undefined} Filtered tasks or undefined if list is empty/all completed.
          */
         _filterTasks(listId) {
             try {
@@ -1193,14 +1172,6 @@ const TaskWidget = GObject.registerClass(
          * Builds an S-expression to facilitate task filtering.
          *
          * @param {string} start - String with the ISO 8601 representation of a
-         * start point in UTC time.
-         * @param {string} end - String with the ISO 8601 representation of an
-         * end point in UTC time.
-         *
-         * @returns {string} S-expression to facilitate task filtering.
-         */
-        // _buildQuery removed — S-expressions are EDS-specific
-
         /**
          * Returns a filter function for hiding completed tasks based on
          * user settings, or null if no filtering needed.
@@ -1339,7 +1310,6 @@ const TaskWidget = GObject.registerClass(
          *
          * @async
          * @param {Checkbox} checkbox - Checkbox that got clicked.
-         * @param {ECal.Client} client - Task list that the task belongs to.
          */
         async _taskClicked(checkbox) {
             try {
