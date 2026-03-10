@@ -317,6 +317,57 @@ const Docket = GObject.registerClass(
                 this._onTaskListSwitched.bind(this, false)
             );
 
+            // Filter button
+            this._filterButton = new St.Button({
+                style_class: 'calendar-change-month-back pager-button pager',
+                can_focus: true,
+                accessible_name: _('Filter tasks'),
+                child: new St.Icon({
+                    icon_name: 'edit-find-symbolic',
+                    icon_size: 16,
+                }),
+            });
+            this._filterMenu = new PopupMenu.PopupMenu(
+                this._filterButton,
+                0.5,
+                St.Side.BOTTOM
+            );
+            this._filterMenu.actor.add_style_class_name('aggregate-menu');
+            Main.uiGroup.add_child(this._filterMenu.actor);
+            this._filterMenu.actor.hide();
+            const filterPlaceholder = new PopupMenu.PopupMenuItem('placeholder');
+            this._filterMenu.addMenuItem(filterPlaceholder);
+
+            this._filterButton.connect('clicked', () =>
+                this._filterMenu.toggle()
+            );
+
+            this._filterMenu.connect('open-state-changed', (_menu, open) => {
+                if (open) this._onFilterMenuOpen();
+            });
+
+            const filterManager = new PopupMenu.PopupMenuManager(
+                this._filterButton
+            );
+            filterManager.addMenu(this._filterMenu);
+
+            // Prevent auto-close on item click
+            this._filterMenu.itemActivated = () => {};
+
+            this._filterMenuItems = {};
+            this._filterToggleItem = null;
+
+            // GSettings listener for filter icon refresh (prefs sync)
+            this._settingsFilterId = this._settings.connect(
+                'changed::show-only-selected-categories',
+                () => {
+                    this._refreshFilterIcon(
+                        this._settings.get_boolean('show-only-selected-categories') &&
+                        this._settings.get_strv('selected-task-categories').length > 0
+                    );
+                }
+            );
+
             this._taskListName = new St.Label({
                 style_class: 'calendar-month-label task-list-name',
                 text: 'placeholder',
@@ -389,6 +440,7 @@ const Docket = GObject.registerClass(
             );
 
             this._headerBox.add_child(this._backButton);
+            this._headerBox.add_child(this._filterButton);
             this._headerBox.add_child(this._taskListNameButton);
             this._headerBox.add_child(this._forwardButton);
             this._contentBox.add_child(this._headerBox);
@@ -781,6 +833,131 @@ const Docket = GObject.registerClass(
             });
 
             this._taskListMenu.addMenuItem(allTasksItem);
+        }
+
+        /**
+         * Populates the category filter popup menu each time it opens.
+         * Reads current state from GSettings so it stays in sync with prefs.
+         */
+        _onFilterMenuOpen() {
+            this._filterMenu.removeAll();
+
+            const enabled = this._settings.get_boolean('show-only-selected-categories');
+            const selected = this._settings.get_strv('selected-task-categories');
+
+            // Enable/disable toggle
+            this._filterToggleItem = new PopupMenu.PopupSwitchMenuItem(
+                _('Enable Filter'), enabled
+            );
+            this._filterToggleItem.connect('toggled', (_item, state) => {
+                this._settings.set_boolean('show-only-selected-categories', state);
+                for (const name in this._filterMenuItems)
+                    this._filterMenuItems[name].setSensitive(state);
+                this._refreshFilterIcon(state && selected.length > 0);
+                this._showActiveTaskList(this._activeTaskList);
+            });
+            this._filterMenu.addMenuItem(this._filterToggleItem);
+            this._filterMenu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+
+            // Category items
+            const categories = [
+                { name: 'past',             label: _('Past') },
+                { name: 'today',            label: _('Due Today') },
+                { name: 'tomorrow',         label: _('Due Tomorrow') },
+                { name: 'next-seven-days',  label: _('Due in Next 7 Days') },
+                { name: 'scheduled',        label: _('Scheduled') },
+                { name: 'unscheduled',      label: _('Unscheduled') },
+                { name: 'not-cancelled',    label: _('Not Cancelled') },
+            ];
+
+            this._filterMenuItems = {};
+            for (const cat of categories) {
+                const item = new PopupMenu.PopupMenuItem(cat.label);
+                item._categoryName = cat.name;
+                item.setOrnament(
+                    selected.includes(cat.name)
+                        ? PopupMenu.Ornament.CHECK
+                        : PopupMenu.Ornament.NONE
+                );
+                item.setSensitive(enabled);
+                item.connect('activate', () => this._toggleCategoryItem(cat.name));
+                this._filterMenu.addMenuItem(item);
+                this._filterMenuItems[cat.name] = item;
+            }
+        }
+
+        /**
+         * Toggles a category in the filter selection and updates GSettings.
+         *
+         * @param {string} name - Category name to toggle.
+         */
+        _toggleCategoryItem(name) {
+            const selection = this._settings.get_strv('selected-task-categories');
+            const idx = selection.indexOf(name);
+
+            if (idx >= 0) {
+                selection.splice(idx, 1);
+            } else {
+                selection.push(name);
+                this._applyCategoryConstraints(name, selection);
+            }
+
+            this._settings.set_strv('selected-task-categories', selection);
+
+            // Auto-enable filtering if something is selected
+            if (selection.length > 0 && !this._settings.get_boolean('show-only-selected-categories')) {
+                this._settings.set_boolean('show-only-selected-categories', true);
+                if (this._filterToggleItem)
+                    this._filterToggleItem.setToggleState(true);
+            }
+
+            // Update ornaments
+            for (const catName in this._filterMenuItems) {
+                this._filterMenuItems[catName].setOrnament(
+                    selection.includes(catName)
+                        ? PopupMenu.Ornament.CHECK
+                        : PopupMenu.Ornament.NONE
+                );
+                this._filterMenuItems[catName].setSensitive(true);
+            }
+
+            this._refreshFilterIcon(selection.length > 0);
+            this._showActiveTaskList(this._activeTaskList);
+        }
+
+        /**
+         * Removes conflicting categories from selection when a new one is added.
+         *
+         * @param {string} justSelected - Category that was just selected.
+         * @param {string[]} selection - Current selection array (modified in place).
+         */
+        _applyCategoryConstraints(justSelected, selection) {
+            const conflicts = {
+                'past':             ['scheduled'],
+                'today':            ['next-seven-days', 'scheduled'],
+                'tomorrow':         ['next-seven-days', 'scheduled'],
+                'next-seven-days':  ['today', 'tomorrow', 'scheduled'],
+                'scheduled':        ['past', 'today', 'tomorrow', 'next-seven-days', 'unscheduled'],
+                'unscheduled':      ['scheduled'],
+            };
+            const toRemove = conflicts[justSelected] || [];
+            for (const c of toRemove) {
+                const idx = selection.indexOf(c);
+                if (idx >= 0) selection.splice(idx, 1);
+            }
+        }
+
+        /**
+         * Updates the filter button appearance based on active/inactive state.
+         *
+         * @param {boolean} active - Whether filtering is currently active.
+         */
+        _refreshFilterIcon(active) {
+            if (active) {
+                this._filterButton.add_style_pseudo_class('active');
+            } else {
+                this._filterButton.remove_style_pseudo_class('active');
+            }
         }
 
         /**
@@ -1717,6 +1894,16 @@ const Docket = GObject.registerClass(
                         this._authManager.destroy();
                         this._authManager = null;
                     }
+                    if (this._filterMenu) {
+                        if (this._filterMenu.actor.get_parent() === Main.uiGroup)
+                            Main.uiGroup.remove_child(this._filterMenu.actor);
+                        this._filterMenu.destroy();
+                        this._filterMenu = null;
+                    }
+                    if (this._settingsFilterId) {
+                        this._settings.disconnect(this._settingsFilterId);
+                        this._settingsFilterId = 0;
+                    }
                     if (this._contentBox) {
                         this._contentBox.destroy();
                         this._contentBox = null;
@@ -1880,6 +2067,15 @@ const Docket = GObject.registerClass(
                 this._taskListNameButton.add_style_class_name('button');
                 this._taskListNameButton.set_reactive(true);
             }
+
+            // Filter button: always visible when task lists exist
+            this._filterButton.visible = this._taskLists.length > 0;
+
+            // Sync filter icon state
+            this._refreshFilterIcon(
+                this._settings.get_boolean('show-only-selected-categories') &&
+                this._settings.get_strv('selected-task-categories').length > 0
+            );
 
             if (
                 !singular ||
@@ -2164,6 +2360,18 @@ const Docket = GObject.registerClass(
                 this._taskListMenu.actor.get_parent() === Main.uiGroup
             )
                 Main.uiGroup.remove_child(this._taskListMenu.actor);
+
+            if (this._filterMenu) {
+                if (this._filterMenu.actor.get_parent() === Main.uiGroup)
+                    Main.uiGroup.remove_child(this._filterMenu.actor);
+                this._filterMenu.destroy();
+                this._filterMenu = null;
+            }
+
+            if (this._settingsFilterId) {
+                this._settings.disconnect(this._settingsFilterId);
+                this._settingsFilterId = 0;
+            }
 
             if (this._themeChangedId) {
                 St.ThemeContext.get_for_stage(global.stage).disconnect(
