@@ -1,6 +1,6 @@
 # Docket
 
-A GNOME Shell extension that displays your Microsoft To Do tasks next to the calendar widget in the date menu.
+A GNOME Shell extension that displays your Microsoft To Do tasks next to the calendar widget in the date menu via MS Graph API.
 
 ![Docket screenshot](screenshot.png)
 
