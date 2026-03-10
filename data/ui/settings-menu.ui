@@ -28,8 +28,10 @@
   <object class="GtkAboutDialog" id="aboutDialog">
     <property name="modal">1</property>
     <property name="hide-on-close">1</property>
-    <property name="copyright" translatable="yes">Copyright © 2020-2023 Juozas Miškinis</property>
-    <property name="authors">Juozas Miškinis &lt;juozas@joasis.lt&gt;</property>
+    <property name="copyright" translatable="yes">Copyright © 2026 Tyler Reece
+Originally based on Task Widget © 2020-2023 Juozas Miškinis</property>
+    <property name="authors">Tyler Reece
+Juozas Miškinis &lt;juozas@joasis.lt&gt; (original Task Widget)</property>
     <property name="logo">resource:///org/gnome/shell/extensions/docket/docket-logo.svg</property>
     <property name="license-type">gpl-2-0</property>
   </object>
