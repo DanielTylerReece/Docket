@@ -1967,10 +1967,10 @@ const Docket = GObject.registerClass(
                 let i = 0;
                 this._showActiveTaskList(this._activeTaskList);
 
-                // Trigger immediate sync and fast polling while menu is open
+                // Full refresh on panel open, then fast delta polling
                 if (this._syncEngine) {
-                    this._syncEngine.sync().catch(e =>
-                        logError(e, 'sync on menu open'));
+                    this._syncEngine.fullSync().catch(e =>
+                        logError(e, 'fullSync on menu open'));
                     this._syncEngine.startPolling(30);
                 }
 

@@ -47,7 +47,7 @@ export class SyncEngine {
     }
 
     /**
-     * Delta sync all lists.
+     * Delta sync all lists (incremental — used for background polling).
      */
     async sync() {
         try {
@@ -63,6 +63,22 @@ export class SyncEngine {
                 this._emit('auth-required');
             else
                 console.error(`[sync-engine] sync error: ${e.message}`);
+        }
+    }
+
+    /**
+     * Full re-fetch of all tasks, replacing the cache entirely.
+     * Use on panel open to catch remote deletions that delta may miss.
+     */
+    async fullSync() {
+        try {
+            await this._fetchAllTasks();
+            this._emit('tasks-changed');
+        } catch (e) {
+            if (e.message === 'auth-required')
+                this._emit('auth-required');
+            else
+                console.error(`[sync-engine] fullSync error: ${e.message}`);
         }
     }
 
@@ -218,7 +234,24 @@ export class SyncEngine {
 
     async _deltaSync(listId) {
         const deltaToken = this._deltaTokens.get(listId) || null;
-        const result = await this._api.deltaQuery(listId, deltaToken);
+        let result;
+
+        try {
+            result = await this._api.deltaQuery(listId, deltaToken);
+        } catch (e) {
+            // Delta token expired (410 Gone) or invalid — full replace
+            if (deltaToken) {
+                console.log(`[sync-engine] Delta token invalid for list ${listId}, doing full refresh`);
+                this._deltaTokens.delete(listId);
+                result = await this._api.deltaQuery(listId, null);
+                this._tasks.set(listId, result.tasks.filter(t => !t._removed));
+                if (result.deltaLink)
+                    this._deltaTokens.set(listId, result.deltaLink);
+                this._saveDeltaTokens();
+                return true;
+            }
+            throw e;
+        }
 
         if (result.tasks.length === 0) {
             if (result.deltaLink)
