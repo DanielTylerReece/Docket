@@ -2,6 +2,8 @@
 
 A GNOME Shell extension that displays your Microsoft To Do tasks next to the calendar widget in the date menu.
 
+![Docket screenshot](screenshot.png)
+
 ## Features
 
 - View and manage Microsoft To Do tasks from the GNOME Shell top bar
