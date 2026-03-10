@@ -8,7 +8,7 @@
     "description": "Display Microsoft To Do tasks next to the calendar widget in the GNOME Shell date menu.",
     "version": @EXTENSION_VERSION@,
     "shell-version": [ "48", "49" ],
-    "url": "https://github.com/tyler-reece/docket",
-    "wiki": "https://github.com/tyler-reece/docket/wiki",
-    "dependencies": "https://github.com/tyler-reece/docket#installation"
+    "url": "https://github.com/DanielTylerReece/Docket",
+    "wiki": "https://github.com/DanielTylerReece/Docket/wiki",
+    "dependencies": "https://github.com/DanielTylerReece/Docket#installation"
 }

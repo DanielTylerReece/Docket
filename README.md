@@ -25,7 +25,7 @@ A GNOME Shell extension that displays your Microsoft To Do tasks next to the cal
 ### From Source
 
 ```bash
-git clone https://github.com/tyler-reece/docket.git
+git clone https://github.com/DanielTylerReece/Docket.git
 cd docket
 meson setup builddir --prefix="$HOME/.local"
 meson install -C builddir
