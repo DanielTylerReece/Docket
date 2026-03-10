@@ -5,6 +5,22 @@ import Gio from 'gi://Gio';
 import { GraphApi } from './graph-api.js';
 import { TaskModel } from './task-model.js';
 
+function _extractDeltaToken(deltaUrl) {
+    try {
+        const uri = GLib.Uri.parse(deltaUrl, GLib.UriFlags.NONE);
+        const query = uri.get_query();
+        if (!query) return null;
+        const params = GLib.Uri.parse_params(query, -1, '&', GLib.UriParamsFlags.NONE);
+        return params['$deltatoken'] || null;
+    } catch {
+        return null;
+    }
+}
+
+function _buildDeltaUrl(listId, token) {
+    return `https://graph.microsoft.com/v1.0/me/todo/lists/${encodeURIComponent(listId)}/tasks/delta?$deltatoken=${encodeURIComponent(token)}`;
+}
+
 /**
  * Sync engine for Microsoft To Do via Graph API.
  * Manages task list/task cache, delta sync, polling, and mutation operations.
@@ -213,6 +229,9 @@ export class SyncEngine {
         this._destroyed = true;
         this.stopPolling();
         this._api.destroy();
+        this._tasks.clear();
+        this._taskLists = [];
+        this._deltaTokens.clear();
     }
 
     // ── Private ─────────────────────────────────────────────────────
@@ -241,7 +260,7 @@ export class SyncEngine {
         } catch (e) {
             // Delta token expired (410 Gone) or invalid — full replace
             if (deltaToken) {
-                console.log(`[sync-engine] Delta token invalid for list ${listId}, doing full refresh`);
+                console.log('[sync-engine] Delta token invalid for a task list, doing full refresh');
                 this._deltaTokens.delete(listId);
                 result = await this._api.deltaQuery(listId, null);
                 this._tasks.set(listId, result.tasks.filter(t => !t._removed));
@@ -304,18 +323,26 @@ export class SyncEngine {
             const json = this._settings.get_string('delta-tokens');
             if (json) {
                 const obj = JSON.parse(json);
-                for (const [k, v] of Object.entries(obj))
-                    this._deltaTokens.set(k, v);
+                for (const [listId, token] of Object.entries(obj)) {
+                    if (typeof token === 'string' && token.length > 0)
+                        this._deltaTokens.set(listId, _buildDeltaUrl(listId, token));
+                }
             }
-        } catch (e) { /* ignore */ }
+        } catch (e) {
+            // Corrupted — clear and force full sync
+            this._settings.set_string('delta-tokens', '');
+        }
     }
 
     _saveDeltaTokens() {
         if (!this._settings) return;
         try {
             const obj = {};
-            for (const [k, v] of this._deltaTokens)
-                obj[k] = v;
+            for (const [k, v] of this._deltaTokens) {
+                const token = _extractDeltaToken(v);
+                if (token)
+                    obj[k] = token;
+            }
             this._settings.set_string('delta-tokens', JSON.stringify(obj));
         } catch (e) { /* ignore */ }
     }

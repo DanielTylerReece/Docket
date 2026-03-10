@@ -27,6 +27,7 @@ export class AuthManager {
         this._expiresAt = 0; // Unix timestamp in seconds
         this._pollSourceId = 0;
         this._destroyed = false;
+        this._refreshPromise = null;
     }
 
     /**
@@ -40,8 +41,12 @@ export class AuthManager {
             return this._accessToken;
 
         if (this._refreshToken) {
+            if (!this._refreshPromise) {
+                this._refreshPromise = this._refreshAccessToken()
+                    .finally(() => { this._refreshPromise = null; });
+            }
             try {
-                await this._refreshAccessToken();
+                await this._refreshPromise;
                 return this._accessToken;
             } catch (e) {
                 // Refresh failed — clear tokens, signal re-auth
@@ -57,7 +62,11 @@ export class AuthManager {
             return this._accessToken;
 
         if (this._refreshToken) {
-            await this._refreshAccessToken();
+            if (!this._refreshPromise) {
+                this._refreshPromise = this._refreshAccessToken()
+                    .finally(() => { this._refreshPromise = null; });
+            }
+            await this._refreshPromise;
             return this._accessToken;
         }
 
@@ -131,10 +140,26 @@ export class AuthManager {
     }
 
     /**
-     * Cleanup — cancel any pending poll timers.
+     * Invalidates the cached access token, forcing a refresh on next use.
+     */
+    invalidateAccessToken() {
+        this._accessToken = null;
+        this._expiresAt = 0;
+    }
+
+    /**
+     * Cleanup — cancel any pending poll timers and clear credentials from memory.
      */
     destroy() {
         this._destroyed = true;
+        this._accessToken = null;
+        this._refreshToken = null;
+        this._expiresAt = 0;
+        this._refreshPromise = null;
+        if (this._session) {
+            this._session.abort();
+            this._session = null;
+        }
         if (this._pollSourceId) {
             GLib.source_remove(this._pollSourceId);
             this._pollSourceId = 0;
@@ -222,6 +247,12 @@ export class AuthManager {
     }
 
     async _refreshAccessToken() {
+        if (!this._refreshToken || typeof this._refreshToken !== 'string' || this._refreshToken.length < 10) {
+            console.log('[auth] Invalid refresh token — clearing credentials');
+            await this.clearTokens();
+            throw new Error('auth-required');
+        }
+
         const params = Soup.form_encode_hash({
             'client_id': CLIENT_ID,
             'scope': SCOPES,

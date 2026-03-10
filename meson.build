@@ -32,9 +32,17 @@ install_subdir(
 subdir('data')
 
 meson.add_install_script('glib-compile-schemas', gschema_dir)
-meson.add_install_script('mkdir', '-p', ext_dir)
-meson.add_install_script('rm', '-rf', ext_dir)
-meson.add_install_script('mv', tmp_dir, ext_dir)
+meson.add_install_script('sh', '-c',
+    'TARGET="' + ext_dir + '" && SOURCE="' + tmp_dir + '" && ' +
+    'if [ -d "$TARGET" ]; then ' +
+    '  BACKUP="${TARGET}.bak.$$" && ' +
+    '  mv "$TARGET" "$BACKUP" && ' +
+    '  mv "$SOURCE" "$TARGET" && ' +
+    '  rm -rf "$BACKUP"; ' +
+    'else ' +
+    '  mkdir -p "$(dirname "$TARGET")" && ' +
+    '  mv "$SOURCE" "$TARGET"; ' +
+    'fi')
 
 if (get_option('build_zip'))
   zip = find_program('zip', required: true)
@@ -43,9 +51,9 @@ if (get_option('build_zip'))
 endif
 
 eslint = find_program('eslint', required: false)
-modules = run_command('npm', 'root', '-g', check: true)
+npm_root_result = run_command('npm', 'root', '-g', check: false)
 
-if eslint.found()
+if eslint.found() and npm_root_result.returncode() == 0
   test('ESLint', eslint, args: [join_paths(meson.project_source_root(), 'src'),
-    '--resolve-plugins-relative-to=' + modules.stdout().strip() + '/'])
+    '--resolve-plugins-relative-to=' + npm_root_result.stdout().strip() + '/'])
 endif

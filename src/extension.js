@@ -1685,11 +1685,30 @@ const Docket = GObject.registerClass(
          */
         _watchForAuth() {
             if (this._authWatchId) return;
+            this._lastAuthEventTime = 0;
+            this._initInProgress = false;
             this._authWatchId = this._settings.connect(
                 'changed::auth-event', () => {
                     const val = this._settings.get_string('auth-event');
                     if (!val) return;
-                    // Tear down current state and re-init on any auth event
+
+                    // Validate format
+                    if (!/^(sign-in|sign-out):\d+$/.test(val))
+                        return;
+
+                    // Debounce: ignore events within 5 seconds
+                    const now = Date.now();
+                    if (now - this._lastAuthEventTime < 5000)
+                        return;
+                    this._lastAuthEventTime = now;
+
+                    const [action] = val.split(':');
+
+                    // Clear user data on sign-out
+                    if (action === 'sign-out')
+                        Utils.clearAccountData_(this._settings);
+
+                    // Tear down current state and re-init
                     if (this._syncEngine) {
                         this._syncEngine.destroy();
                         this._syncEngine = null;
@@ -1711,7 +1730,12 @@ const Docket = GObject.registerClass(
                         this._settingsChangedId = 0;
                     }
                     this._linkLabel.hide();
-                    this._initTaskLists();
+                    if (!this._initInProgress) {
+                        this._initInProgress = true;
+                        this._initTaskLists().finally(() => {
+                            this._initInProgress = false;
+                        });
+                    }
                 }
             );
         }
@@ -2037,7 +2061,10 @@ const Docket = GObject.registerClass(
 
                             if (i++ < 60 && this._activeTaskList !== null)
                                 return GLib.SOURCE_CONTINUE;
-                            else this._onMenuOpen(null, false);
+                            else {
+                                this._onMenuOpen(null, false);
+                                return GLib.SOURCE_REMOVE;
+                            }
                         }
                     );
                 }
@@ -2053,6 +2080,7 @@ const Docket = GObject.registerClass(
                     delete this._refreshTimeoutId;
                 }
 
+                if (!this._taskBox) return;
                 const height = this._taskBox.get_allocation_box().get_height();
 
                 // Once the menu is closed, remove tasks below the visible

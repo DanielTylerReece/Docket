@@ -3,6 +3,31 @@
 import GLib from 'gi://GLib';
 import Soup from 'gi://Soup?version=3.0';
 
+const ALLOWED_HOSTS = new Set([
+    'graph.microsoft.com',
+    'login.microsoftonline.com',
+]);
+
+function _validateUrl(url) {
+    if (typeof url !== 'string')
+        throw new Error('URL must be a string');
+
+    let parsed;
+    try {
+        parsed = GLib.Uri.parse(url, GLib.UriFlags.NONE);
+    } catch {
+        throw new Error(`Invalid URL: ${url.substring(0, 50)}`);
+    }
+
+    if (parsed.get_scheme() !== 'https')
+        throw new Error(`URL must use HTTPS: ${parsed.get_scheme()}`);
+
+    if (!ALLOWED_HOSTS.has(parsed.get_host()))
+        throw new Error(`Untrusted host: ${parsed.get_host()}`);
+
+    return url;
+}
+
 /**
  * HTTP client for Microsoft Graph API with automatic auth, retry, and backoff.
  */
@@ -10,6 +35,7 @@ export class GraphHttpClient {
     constructor(authManager) {
         this._auth = authManager;
         this._session = new Soup.Session();
+        this._session.timeout = 30;
     }
 
     /**
@@ -47,14 +73,19 @@ export class GraphHttpClient {
     }
 
     destroy() {
-        this._session = null;
+        if (this._session) {
+            this._session.abort();
+            this._session = null;
+        }
+        this._auth = null;
     }
 
     // ── Private ─────────────────────────────────────────────────────
 
     async _request(method, url, body, retryCount = 0) {
+        const validatedUrl = _validateUrl(url);
         const token = await this._auth.getAccessToken();
-        const message = new Soup.Message({method, uri: GLib.Uri.parse(url, GLib.UriFlags.NONE)});
+        const message = new Soup.Message({method, uri: GLib.Uri.parse(validatedUrl, GLib.UriFlags.NONE)});
         message.get_request_headers().append('Authorization', `Bearer ${token}`);
 
         if (body !== null && body !== undefined) {
@@ -66,17 +97,16 @@ export class GraphHttpClient {
 
         const response = await this._send(message);
 
-        // 401: token expired — refresh and retry once
+        // 401: token expired — invalidate and refresh, retry once
         if (response.status === 401 && retryCount < 1) {
-            await this._auth.getAccessToken(); // forces refresh
+            this._auth.invalidateAccessToken();
             return this._request(method, url, body, retryCount + 1);
         }
 
-        // 429: rate limited — respect Retry-After
+        // 429: rate limited — respect Retry-After (clamped to 120s max)
         if (response.status === 429 && retryCount < 3) {
-            const retryAfter = parseInt(
-                message.get_response_headers().get_one('Retry-After') || '5', 10
-            );
+            const raw = message.get_response_headers().get_one('Retry-After') || '5';
+            const retryAfter = Math.min(Math.max(parseInt(raw, 10) || 5, 1), 120);
             await this._wait(retryAfter);
             return this._request(method, url, body, retryCount + 1);
         }
@@ -111,7 +141,8 @@ export class GraphHttpClient {
                         try {
                             body = JSON.parse(text);
                         } catch (e) {
-                            body = {_raw: text};
+                            console.log('Docket: Non-JSON response received');
+                            body = {error: {code: 'non_json_response', message: 'Response was not valid JSON'}};
                         }
                         resolve({status, body});
                     } catch (e) {

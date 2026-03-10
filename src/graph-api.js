@@ -20,7 +20,7 @@ export class GraphApi {
     async listTaskLists() {
         const res = await this._client.get(`${BASE}/me/todo/lists`);
         this._checkStatus(res, 200);
-        return res.body.value;
+        return Array.isArray(res.body?.value) ? res.body.value : [];
     }
 
     /**
@@ -30,15 +30,19 @@ export class GraphApi {
      */
     async listTasks(listId) {
         let tasks = [];
-        let url = `${BASE}/me/todo/lists/${listId}/tasks?$expand=checklistItems`;
+        let url = `${BASE}/me/todo/lists/${encodeURIComponent(listId)}/tasks?$expand=checklistItems`;
 
         // Handle pagination
         while (url) {
             const res = await this._client.get(url);
             this._checkStatus(res, 200);
-            for (const g of res.body.value)
+            const items = Array.isArray(res.body?.value) ? res.body.value : [];
+            for (const g of items)
                 tasks.push(TaskModel.fromGraphJson(g, listId));
-            url = res.body['@odata.nextLink'] || null;
+            const nextUrl = res.body['@odata.nextLink'] || null;
+            if (nextUrl && !nextUrl.startsWith('https://graph.microsoft.com/'))
+                throw new Error(`Untrusted nextLink: ${nextUrl.substring(0, 80)}`);
+            url = nextUrl;
         }
 
         return tasks;
@@ -52,7 +56,7 @@ export class GraphApi {
      */
     async createTask(listId, taskData) {
         const res = await this._client.post(
-            `${BASE}/me/todo/lists/${listId}/tasks`, taskData
+            `${BASE}/me/todo/lists/${encodeURIComponent(listId)}/tasks`, taskData
         );
         this._checkStatus(res, 201);
         return TaskModel.fromGraphJson(res.body, listId);
@@ -67,7 +71,7 @@ export class GraphApi {
      */
     async updateTask(listId, taskId, patch) {
         const res = await this._client.patch(
-            `${BASE}/me/todo/lists/${listId}/tasks/${taskId}`, patch
+            `${BASE}/me/todo/lists/${encodeURIComponent(listId)}/tasks/${encodeURIComponent(taskId)}`, patch
         );
         this._checkStatus(res, 200);
         return TaskModel.fromGraphJson(res.body, listId);
@@ -80,7 +84,7 @@ export class GraphApi {
      */
     async deleteTask(listId, taskId) {
         const res = await this._client.delete(
-            `${BASE}/me/todo/lists/${listId}/tasks/${taskId}`
+            `${BASE}/me/todo/lists/${encodeURIComponent(listId)}/tasks/${encodeURIComponent(taskId)}`
         );
         this._checkStatus(res, 204);
     }
@@ -94,7 +98,7 @@ export class GraphApi {
      */
     async createChecklistItem(listId, taskId, item) {
         const res = await this._client.post(
-            `${BASE}/me/todo/lists/${listId}/tasks/${taskId}/checklistItems`,
+            `${BASE}/me/todo/lists/${encodeURIComponent(listId)}/tasks/${encodeURIComponent(taskId)}/checklistItems`,
             item
         );
         this._checkStatus(res, 201);
@@ -111,7 +115,7 @@ export class GraphApi {
      */
     async updateChecklistItem(listId, taskId, itemId, patch) {
         const res = await this._client.patch(
-            `${BASE}/me/todo/lists/${listId}/tasks/${taskId}/checklistItems/${itemId}`,
+            `${BASE}/me/todo/lists/${encodeURIComponent(listId)}/tasks/${encodeURIComponent(taskId)}/checklistItems/${encodeURIComponent(itemId)}`,
             patch
         );
         this._checkStatus(res, 200);
@@ -125,14 +129,15 @@ export class GraphApi {
      * @returns {Promise<{tasks: object[], deltaLink: string}>}
      */
     async deltaQuery(listId, deltaToken = null) {
-        let url = deltaToken || `${BASE}/me/todo/lists/${listId}/tasks/delta`;
+        let url = deltaToken || `${BASE}/me/todo/lists/${encodeURIComponent(listId)}/tasks/delta`;
         let tasks = [];
 
         while (url) {
             const res = await this._client.get(url);
             this._checkStatus(res, 200);
 
-            for (const g of res.body.value) {
+            const items = Array.isArray(res.body?.value) ? res.body.value : [];
+            for (const g of items) {
                 // Delta responses may include @removed for deleted tasks
                 if (g['@removed']) {
                     tasks.push({id: g.id, _removed: true});
@@ -142,9 +147,15 @@ export class GraphApi {
             }
 
             if (res.body['@odata.deltaLink']) {
-                return {tasks, deltaLink: res.body['@odata.deltaLink']};
+                const deltaLink = res.body['@odata.deltaLink'];
+                if (!deltaLink.startsWith('https://graph.microsoft.com/'))
+                    throw new Error(`Untrusted deltaLink: ${deltaLink.substring(0, 80)}`);
+                return {tasks, deltaLink};
             }
-            url = res.body['@odata.nextLink'] || null;
+            const nextUrl = res.body['@odata.nextLink'] || null;
+            if (nextUrl && !nextUrl.startsWith('https://graph.microsoft.com/'))
+                throw new Error(`Untrusted nextLink: ${nextUrl.substring(0, 80)}`);
+            url = nextUrl;
         }
 
         // Should not reach here — last page always has deltaLink
@@ -156,7 +167,9 @@ export class GraphApi {
     }
 
     _checkStatus(res, expected) {
-        if (res.status !== expected)
-            throw new Error(`Graph API error: expected ${expected}, got ${res.status}: ${JSON.stringify(res.body).substring(0, 200)}`);
+        if (res.status !== expected) {
+            const code = res.body?.error?.code || 'unknown';
+            throw new Error(`Graph API error: expected ${expected}, got ${res.status} (${code})`);
+        }
     }
 }

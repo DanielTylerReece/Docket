@@ -138,6 +138,18 @@ export function debounce_(func, id, wait, immediate = false) {
  * Removes any remaining timeouts created by the `debounce_` function.
  */
 export function removeDebounceTimeouts_() {
-    if (_debounceTimeoutIds.size)
-        _debounceTimeoutIds.keys().forEach((id) => GLib.source_remove(id));
+    for (const sourceId of _debounceTimeoutIds.values())
+        GLib.source_remove(sourceId);
+    _debounceTimeoutIds.clear();
+}
+
+/**
+ * Clear all user-specific data from GSettings after sign-out.
+ * @param {Gio.Settings} settings
+ */
+export function clearAccountData_(settings) {
+    settings.reset('delta-tokens');
+    settings.reset('task-list-order');
+    settings.reset('disabled-task-lists');
+    settings.reset('last-active');
 }

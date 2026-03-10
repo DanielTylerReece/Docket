@@ -1,5 +1,5 @@
 default:
-  image: ubuntu:latest
+  image: ubuntu:24.04
 
 stages:
   - build
@@ -12,11 +12,9 @@ build:
     - >
       apt-get -y install python3-pip ninja-build libglib2.0-dev
       libxml2-utils zip gettext
-    - pip3 install meson
-    - curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
-    - export NVM_DIR="$HOME/.nvm" && . "$NVM_DIR/nvm.sh"
-    - nvm install node
-    - npm install -g eslint eslint-plugin-jsdoc
+    - pip3 install --break-system-packages meson==1.4.0
+    - apt-get -y install nodejs npm
+    - npm install -g eslint@8.57.0 eslint-plugin-jsdoc@48.2.3
   script:
     - meson _build -Dbuild_zip=true
     - meson test -C _build

@@ -503,6 +503,15 @@ const DocketSettings = GObject.registerClass(
                 // Wait for poll completion
                 await flow.pollPromise;
 
+                // Clear device code from clipboard after 30 seconds
+                GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 30, () => {
+                    try {
+                        const cb = Gdk.Display.get_default().get_clipboard();
+                        cb.set('');
+                    } catch (e) { /* ignore */ }
+                    return GLib.SOURCE_REMOVE;
+                });
+
                 // Success — notify extension and rebuild UI
                 this._settings.set_string('auth-event', `sign-in:${Date.now()}`);
                 this.remove(this._authGroup);
@@ -528,6 +537,7 @@ const DocketSettings = GObject.registerClass(
             try {
                 await this._authManager.clearTokens();
                 this._settings.set_string('auth-event', `sign-out:${Date.now()}`);
+                Utils.clearAccountData_(this._settings);
 
                 // Clear task list rows
                 let row = this._taskListBox.get_row_at_index(0);
@@ -717,6 +727,7 @@ const TaskListRow = GObject.registerClass(
             super._init();
             this._settings = widget._settings;
             this._uid = list.id;
+            this.set_use_markup(false);
             this.set_title(list.displayName);
 
             this._taskListProvider.set_text('Microsoft To Do');
@@ -994,6 +1005,7 @@ const SettingsMenuButton = GObject.registerClass(
                 }
 
                 const logHeader =
+                    '\u26A0 This log may contain task list names and Microsoft account identifiers. Review before sharing.\n\n' +
                     widgetName +
                     '\n' +
                     GLib.get_os_info('PRETTY_NAME') +
@@ -1038,7 +1050,7 @@ const SettingsMenuButton = GObject.registerClass(
                     flags:
                         Gio.SubprocessFlags.STDOUT_PIPE |
                         Gio.SubprocessFlags.STDERR_MERGE,
-                    argv: ['journalctl', '--no-host', '--since', time]
+                    argv: ['journalctl', '_COMM=gnome-shell', '--no-host', '--since', time]
                 });
 
                 process.init(null);
