@@ -185,106 +185,156 @@ const Docket = GObject.registerClass(
 
                 // Initialize Graph API sync engine
                 this._authManager = new AuthManager();
-                await this._authManager.loadTokens();
-                this._syncEngine = new SyncEngine(
-                    this._authManager, this._settings
-                );
-
-                this._syncEngine.connect('tasks-changed', () => {
-                    this._onSyncUpdate();
-                });
-                this._syncEngine.connect('lists-changed', () => {
-                    this._storeTaskLists();
-                    this._showActiveTaskList(this._activeTaskList || 0);
-                });
-                this._syncEngine.connect('auth-required', () => {
-                    this._showPlaceholderWithStatus('missing-dependencies');
-                });
-
+                let tokensLoaded = false;
                 try {
-                    await this._syncEngine.initialize();
+                    tokensLoaded = await this._authManager.loadTokens();
                 } catch (e) {
-                    if (e.message === 'auth-required') {
-                        this._showPlaceholderWithStatus('missing-dependencies');
-                        this._watchForAuth();
-                        return;
-                    }
-                    throw e;
-                }
-
-                this._storeTaskLists(true);
-                this._buildHeader();
-
-                this._buildQuickAddEntry();
-
-                this._scrollView = new St.ScrollView({
-                    style_class: 'vfade',
-                    clip_to_allocation: true,
-                    y_expand: true,
-                });
-
-                this._scrollView
-                    .get_vadjustment()
-                    .connect(
-                        'notify::value',
-                        Utils.debounce_(
-                            this._onTaskListScrolled.bind(this),
-                            'vscroll',
-                            100,
-                            false
-                        )
+                    // Keyring may be locked after screen unlock — retry
+                    console.log('[docket] Keyring inaccessible, scheduling retry...');
+                    this._tokenRetryCount = 0;
+                    this._tokenRetryId = GLib.timeout_add_seconds(
+                        GLib.PRIORITY_DEFAULT, 2, () => {
+                            if (this._destroyed) return GLib.SOURCE_REMOVE;
+                            this._tokenRetryCount++;
+                            if (!this._authManager) return GLib.SOURCE_REMOVE;
+                            this._authManager.loadTokens().then(loaded => {
+                                if (this._destroyed || !this._authManager) return;
+                                if (loaded) {
+                                    console.log('[docket] Tokens loaded on retry');
+                                    this._tokenRetryId = 0;
+                                    this._initAfterTokens(themeContext).catch(
+                                        err => logError(err)
+                                    );
+                                }
+                            }).catch(retryErr => {
+                                console.log(`[docket] Token retry ${this._tokenRetryCount}/5 failed: ${retryErr.message}`);
+                            });
+                            if (this._tokenRetryCount >= 5) {
+                                console.log('[docket] All token retries exhausted');
+                                this._tokenRetryId = 0;
+                                if (!this._destroyed) {
+                                    this._showPlaceholderWithStatus('missing-dependencies');
+                                    this._watchForAuth();
+                                }
+                                return GLib.SOURCE_REMOVE;
+                            }
+                            return GLib.SOURCE_CONTINUE;
+                        }
                     );
-
-                this._threshold =
-                    Utils.LL_THRESHOLD_ * themeContext.scale_factor;
-
-                const spacing = this.get_theme_node().get_length('spacing') * 2;
-
-                this._taskBox = new St.BoxLayout({
-                    orientation: Clutter.Orientation.VERTICAL,
-                    style: `spacing: ${spacing / themeContext.scaleFactor}px`
-                });
-
-                this._scrollView.add_child(this._taskBox);
-                this._contentBox.add_child(this._scrollView);
-
-                // Hide completed tasks row
-                this._buildCompletedRow();
-
-                this._themeChangedId = themeContext.connect(
-                    'notify::scale-factor',
-                    this._loadThemeHacks.bind(this)
-                );
-
-                this._onMenuOpenId = DateMenu.connect(
-                    'open-state-changed',
-                    this._onMenuOpen.bind(this)
-                );
-
-                Gio.Settings.sync();
-
-                this._settingsChangedId = this._settings.connect(
-                    'changed',
-                    this._onSettingsChanged.bind(this)
-                );
-
-                this._watchForAuth();
-
-                if (!this._taskLists.length) {
-                    this._showPlaceholderWithStatus('no-tasks');
-                    return;
+                    return; // Don't continue — retry will handle init
                 }
 
-                const last = this._settings.get_string('last-active');
-                const index = this._taskLists.map((i) => i.uid).indexOf(last);
-                this._mergeTaskLists = last === 'merge';
-
-                this._showActiveTaskList(
-                    index !== -1 && !this._mergeTaskLists ? index : 0
-                );
+                await this._initAfterTokens(themeContext);
             } catch (e) {
                 logError(e);
             }
+        }
+
+        /**
+         * Continues initialization after tokens are loaded from keyring.
+         * Extracted so both the normal path and keyring-retry path can
+         * call the same code.
+         *
+         * @param {St.ThemeContext} themeContext
+         * @async
+         */
+        async _initAfterTokens(themeContext) {
+            this._syncEngine = new SyncEngine(
+                this._authManager, this._settings
+            );
+
+            this._syncEngine.connect('tasks-changed', () => {
+                this._onSyncUpdate();
+            });
+            this._syncEngine.connect('lists-changed', () => {
+                this._storeTaskLists();
+                this._showActiveTaskList(this._activeTaskList || 0);
+            });
+            this._syncEngine.connect('auth-required', () => {
+                this._showPlaceholderWithStatus('missing-dependencies');
+            });
+
+            try {
+                await this._syncEngine.initialize();
+            } catch (e) {
+                if (e.message === 'auth-required') {
+                    this._showPlaceholderWithStatus('missing-dependencies');
+                    this._watchForAuth();
+                    return;
+                }
+                throw e;
+            }
+
+            this._storeTaskLists(true);
+            this._buildHeader();
+
+            this._buildQuickAddEntry();
+
+            this._scrollView = new St.ScrollView({
+                style_class: 'vfade',
+                clip_to_allocation: true,
+                y_expand: true,
+            });
+
+            this._scrollView
+                .get_vadjustment()
+                .connect(
+                    'notify::value',
+                    Utils.debounce_(
+                        this._onTaskListScrolled.bind(this),
+                        'vscroll',
+                        100,
+                        false
+                    )
+                );
+
+            this._threshold =
+                Utils.LL_THRESHOLD_ * themeContext.scale_factor;
+
+            const spacing = this.get_theme_node().get_length('spacing') * 2;
+
+            this._taskBox = new St.BoxLayout({
+                orientation: Clutter.Orientation.VERTICAL,
+                style: `spacing: ${spacing / themeContext.scaleFactor}px`
+            });
+
+            this._scrollView.add_child(this._taskBox);
+            this._contentBox.add_child(this._scrollView);
+
+            // Hide completed tasks row
+            this._buildCompletedRow();
+
+            this._themeChangedId = themeContext.connect(
+                'notify::scale-factor',
+                this._loadThemeHacks.bind(this)
+            );
+
+            this._onMenuOpenId = DateMenu.connect(
+                'open-state-changed',
+                this._onMenuOpen.bind(this)
+            );
+
+            Gio.Settings.sync();
+
+            this._settingsChangedId = this._settings.connect(
+                'changed',
+                this._onSettingsChanged.bind(this)
+            );
+
+            this._watchForAuth();
+
+            if (!this._taskLists.length) {
+                this._showPlaceholderWithStatus('no-tasks');
+                return;
+            }
+
+            const last = this._settings.get_string('last-active');
+            const index = this._taskLists.map((i) => i.uid).indexOf(last);
+            this._mergeTaskLists = last === 'merge';
+
+            this._showActiveTaskList(
+                index !== -1 && !this._mergeTaskLists ? index : 0
+            );
         }
 
         /**
@@ -2130,6 +2180,10 @@ const Docket = GObject.registerClass(
                         Utils.clearAccountData_(this._settings);
 
                     // Tear down current state and re-init
+                    if (this._tokenRetryId) {
+                        GLib.source_remove(this._tokenRetryId);
+                        this._tokenRetryId = 0;
+                    }
                     if (this._syncEngine) {
                         this._syncEngine.destroy();
                         this._syncEngine = null;
@@ -2650,6 +2704,13 @@ const Docket = GObject.registerClass(
 
             if (this._authWatchId)
                 this._settings.disconnect(this._authWatchId);
+
+            if (this._tokenRetryId) {
+                GLib.source_remove(this._tokenRetryId);
+                this._tokenRetryId = 0;
+            }
+
+            this._destroyed = true;
 
             if (this._cleanUpId) GLib.source_remove(this._cleanUpId);
 

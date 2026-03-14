@@ -294,7 +294,7 @@ export class AuthManager {
             return !!(this._accessToken || this._refreshToken);
         } catch (e) {
             console.error(`[auth] Failed to load tokens: ${e.message}`);
-            return false;
+            throw e;  // Let caller handle — may be keyring locked (temporary)
         }
     }
 
