@@ -2469,7 +2469,13 @@ const Docket = GObject.registerClass(
             try {
                 const task = checkbox._task;
                 const listId = task._taskList;
-                await this._syncEngine.deleteTask(listId, task.id);
+                if (task._isChecklistItem && task._parentTaskId) {
+                    await this._syncEngine.deleteSubtask(
+                        listId, task._parentTaskId, task.id
+                    );
+                } else {
+                    await this._syncEngine.deleteTask(listId, task.id);
+                }
                 this._showActiveTaskList(this._activeTaskList);
             } catch (e) {
                 logError(e);

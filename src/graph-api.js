@@ -122,6 +122,19 @@ export class GraphApi {
         return res.body;
     }
 
+    /**
+     * Delete a checklist item from a task.
+     * @param {string} listId
+     * @param {string} taskId
+     * @param {string} itemId
+     */
+    async deleteChecklistItem(listId, taskId, itemId) {
+        const res = await this._client.delete(
+            `${BASE}/me/todo/lists/${encodeURIComponent(listId)}/tasks/${encodeURIComponent(taskId)}/checklistItems/${encodeURIComponent(itemId)}`
+        );
+        this._checkStatus(res, 204);
+    }
+
     // ── Task List CRUD ─────────────────────────────────────────────
 
     /**

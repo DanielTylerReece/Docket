@@ -217,6 +217,10 @@ export class BackendAdapter {
         throw new Error('not implemented');
     }
 
+    async deleteSubtask(listId, taskId, subtaskId) {
+        throw new Error('not implemented');
+    }
+
     // ── Delta Sync ───────────────────────────────────────────────────
 
     /**

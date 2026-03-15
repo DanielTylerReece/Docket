@@ -281,6 +281,12 @@ export class TodoistBackend extends BackendAdapter {
         return this._api.createSubtask(listId, taskId, title);
     }
 
+    async deleteSubtask(listId, _taskId, subtaskId) {
+        // Todoist subtasks are regular tasks — delete by subtask ID
+        this._ensureApi();
+        return this._api.deleteTask(listId, subtaskId);
+    }
+
     // ── Delta Sync ───────────────────────────────────────────────────
 
     /**

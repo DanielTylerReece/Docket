@@ -606,6 +606,39 @@ export class SyncEngine {
     }
 
     /**
+     * Delete a subtask/checklist item.
+     */
+    async deleteSubtask(listId, taskId, subtaskId) {
+        const backend = this._getBackendForList(listId);
+        const tasks = this._tasks.get(listId) || [];
+        const task = tasks.find(t => t.id === taskId);
+
+        // Save for rollback
+        let removedItem = null;
+        let removedIndex = -1;
+        if (task && task.checklistItems) {
+            removedIndex = task.checklistItems.findIndex(ci => ci.id === subtaskId);
+            if (removedIndex !== -1)
+                removedItem = task.checklistItems.splice(removedIndex, 1)[0];
+        }
+
+        this._saveCacheToDisk();
+        this._emit('tasks-changed');
+
+        this._enqueueOperation({
+            description: `Delete subtask "${removedItem?.displayName || subtaskId}"`,
+            execute: () => backend.deleteSubtask(listId, taskId, subtaskId),
+            rollback: () => {
+                if (removedItem && task && task.checklistItems) {
+                    task.checklistItems.splice(removedIndex, 0, removedItem);
+                    this._saveCacheToDisk();
+                    this._emit('tasks-changed');
+                }
+            },
+        });
+    }
+
+    /**
      * Toggle a checklist item's checked state.
      */
     async toggleChecklistItem(listId, taskId, itemId) {

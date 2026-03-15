@@ -274,6 +274,11 @@ export class GraphBackend extends BackendAdapter {
         return this._api.createChecklistItem(listId, taskId, {displayName: title});
     }
 
+    async deleteSubtask(listId, taskId, subtaskId) {
+        this._ensureApi();
+        return this._api.deleteChecklistItem(listId, taskId, subtaskId);
+    }
+
     // ── Delta Sync ───────────────────────────────────────────────────
 
     /**
