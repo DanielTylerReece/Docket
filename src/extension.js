@@ -12,6 +12,7 @@ import St from 'gi://St';
 
 import * as CheckBox from 'resource:///org/gnome/shell/ui/checkBox.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import * as ModalDialog from 'resource:///org/gnome/shell/ui/modalDialog.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import * as Utils from './utils.js';
 
@@ -498,7 +499,15 @@ const Docket = GObject.registerClass(
                 y_align: Clutter.ActorAlign.CENTER
             });
 
+            this._headerBackendIcon = new St.Icon({
+                icon_size: 16,
+                y_align: Clutter.ActorAlign.CENTER,
+                style: 'margin-right: 4px;',
+                visible: false,
+            });
+
             const taskListNameBox = new St.BoxLayout();
+            taskListNameBox.add_child(this._headerBackendIcon);
             taskListNameBox.add_child(this._taskListName);
             taskListNameBox.add_child(this._taskListNameArrow);
 
@@ -1038,6 +1047,35 @@ const Docket = GObject.registerClass(
 
                 const item = new PopupMenu.PopupMenuItem(name);
 
+                const iconName = this._backendIconName(taskList.backendId);
+                if (iconName) {
+                    const icon = new St.Icon({
+                        icon_name: iconName,
+                        icon_size: 16,
+                        style_class: 'popup-menu-icon',
+                        y_align: Clutter.ActorAlign.CENTER,
+                    });
+                    item.insert_child_below(icon, item.label);
+                }
+
+                // Edit button for renaming the list
+                const editBtn = new St.Button({
+                    style_class: 'list-edit-button',
+                    can_focus: true,
+                    child: new St.Icon({
+                        style_class: 'list-edit-icon',
+                        icon_name: 'document-edit-symbolic',
+                        icon_size: 14,
+                    }),
+                    x_align: Clutter.ActorAlign.END,
+                    y_align: Clutter.ActorAlign.CENTER,
+                });
+                editBtn.connect('clicked', () => {
+                    this._taskListMenu.close();
+                    this._onEditTaskList(taskList, index);
+                });
+                item.add_child(editBtn);
+
                 if (index === this._activeTaskList && !this._mergeTaskLists)
                     item.setOrnament(PopupMenu.Ornament.DOT);
                 else item.setOrnament(PopupMenu.Ornament.NONE);
@@ -1068,6 +1106,253 @@ const Docket = GObject.registerClass(
             });
 
             this._taskListMenu.addMenuItem(allTasksItem);
+
+            // "Create new list..." item
+            const createSeparator = new PopupMenu.PopupSeparatorMenuItem();
+            this._taskListMenu.addMenuItem(createSeparator);
+
+            const createItem = new PopupMenu.PopupMenuItem(_('Create new list\u2026'));
+            createItem.connect('activate', () => {
+                this._onCreateTaskList();
+            });
+            this._taskListMenu.addMenuItem(createItem);
+        }
+
+        /**
+         * Opens a modal dialog to create a new task list.
+         * Determines which backend to use: if only one is authenticated,
+         * uses that one; if multiple, defaults to the first authenticated.
+         */
+        _onCreateTaskList() {
+            // Determine which backend to create in
+            const authenticatedBackends = [...this._backends.entries()]
+                .filter(([_id, b]) => b.isAuthenticated());
+
+            if (authenticatedBackends.length === 0) {
+                console.error('[docket] No authenticated backends for list creation');
+                return;
+            }
+
+            const dialog = new ModalDialog.ModalDialog({
+                styleClass: 'docket-create-list-dialog',
+            });
+
+            const contentBox = new St.BoxLayout({
+                orientation: Clutter.Orientation.VERTICAL,
+                style: 'spacing: 12px; padding: 12px;',
+            });
+
+            const titleLabel = new St.Label({
+                text: _('Create New List'),
+                style: 'font-weight: bold; font-size: 1.1em;',
+            });
+            contentBox.add_child(titleLabel);
+
+            const entry = new St.Entry({
+                hint_text: _('List name'),
+                can_focus: true,
+                x_expand: true,
+                style: 'min-width: 250px;',
+            });
+            contentBox.add_child(entry);
+
+            // If multiple backends, show a selector
+            let selectedBackendId = authenticatedBackends[0][0];
+            if (authenticatedBackends.length > 1) {
+                const backendBox = new St.BoxLayout({
+                    style: 'spacing: 8px;',
+                    x_align: Clutter.ActorAlign.CENTER,
+                });
+                const backendLabel = new St.Label({
+                    text: _('Account:'),
+                    y_align: Clutter.ActorAlign.CENTER,
+                });
+                backendBox.add_child(backendLabel);
+
+                for (const [backendId] of authenticatedBackends) {
+                    const displayName = backendId === 'microsoft' ? 'Microsoft' : 'Todoist';
+                    const btn = new St.Button({
+                        label: displayName,
+                        style_class: backendId === selectedBackendId
+                            ? 'list-backend-selector list-backend-selected'
+                            : 'list-backend-selector',
+                        can_focus: true,
+                    });
+                    btn._backendId = backendId;
+                    btn.connect('clicked', () => {
+                        selectedBackendId = backendId;
+                        // Update button styles
+                        for (const child of backendBox.get_children()) {
+                            if (child instanceof St.Button) {
+                                if (child._backendId === backendId)
+                                    child.add_style_class_name('list-backend-selected');
+                                else
+                                    child.remove_style_class_name('list-backend-selected');
+                            }
+                        }
+                    });
+                    backendBox.add_child(btn);
+                }
+                contentBox.add_child(backendBox);
+            }
+
+            dialog.contentLayout.add_child(contentBox);
+
+            dialog.addButton({
+                label: _('Cancel'),
+                action: () => dialog.close(global.get_current_time()),
+                key: Clutter.KEY_Escape,
+            });
+
+            dialog.addButton({
+                label: _('OK'),
+                action: () => {
+                    const name = entry.get_text().trim();
+                    dialog.close(global.get_current_time());
+                    if (name) {
+                        this._syncEngine.createTaskList(selectedBackendId, name)
+                            .catch(e => logError(e));
+                    }
+                },
+                key: Clutter.KEY_Return,
+                default: true,
+            });
+
+            dialog.open(global.get_current_time());
+
+            // Focus the entry after dialog opens
+            GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
+                entry.grab_key_focus();
+                return GLib.SOURCE_REMOVE;
+            });
+        }
+
+        /**
+         * Opens a modal dialog to edit (rename or delete) a task list.
+         * @param {object} taskList - The task list object {uid, name, backendId}
+         * @param {number} index - Index of the task list in this._taskLists
+         */
+        _onEditTaskList(taskList, index) {
+            const dialog = new ModalDialog.ModalDialog({
+                styleClass: 'docket-edit-list-dialog',
+            });
+
+            const contentBox = new St.BoxLayout({
+                orientation: Clutter.Orientation.VERTICAL,
+                style: 'spacing: 12px; padding: 12px;',
+            });
+
+            const titleLabel = new St.Label({
+                text: _('Edit List'),
+                style: 'font-weight: bold; font-size: 1.1em;',
+            });
+            contentBox.add_child(titleLabel);
+
+            const entry = new St.Entry({
+                text: taskList.name,
+                can_focus: true,
+                x_expand: true,
+                style: 'min-width: 250px;',
+            });
+            contentBox.add_child(entry);
+
+            dialog.contentLayout.add_child(contentBox);
+
+            // Delete button
+            dialog.addButton({
+                label: _('Delete'),
+                action: () => {
+                    dialog.close(global.get_current_time());
+                    this._onDeleteTaskList(taskList, index);
+                },
+            });
+
+            dialog.addButton({
+                label: _('Cancel'),
+                action: () => dialog.close(global.get_current_time()),
+                key: Clutter.KEY_Escape,
+            });
+
+            dialog.addButton({
+                label: _('Save'),
+                action: () => {
+                    const newName = entry.get_text().trim();
+                    dialog.close(global.get_current_time());
+                    if (newName && newName !== taskList.name) {
+                        this._syncEngine.renameTaskList(taskList.uid, newName)
+                            .catch(e => logError(e));
+                    }
+                },
+                key: Clutter.KEY_Return,
+                default: true,
+            });
+
+            dialog.open(global.get_current_time());
+
+            // Focus the entry and select all text after dialog opens
+            GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
+                entry.grab_key_focus();
+                entry.get_clutter_text().set_selection(0, -1);
+                return GLib.SOURCE_REMOVE;
+            });
+        }
+
+        /**
+         * Shows a confirmation dialog and deletes a task list.
+         * @param {object} taskList - The task list object {uid, name, backendId}
+         * @param {number} index - Index of the task list in this._taskLists
+         */
+        _onDeleteTaskList(taskList, index) {
+            const dialog = new ModalDialog.ModalDialog({
+                styleClass: 'docket-delete-list-dialog',
+            });
+
+            const contentBox = new St.BoxLayout({
+                orientation: Clutter.Orientation.VERTICAL,
+                style: 'spacing: 12px; padding: 12px;',
+            });
+
+            const warningLabel = new St.Label({
+                text: _('Delete list "%s"?').format(taskList.name),
+                style: 'font-weight: bold; font-size: 1.1em;',
+            });
+            contentBox.add_child(warningLabel);
+
+            const detailLabel = new St.Label({
+                text: _('All tasks in this list will be permanently deleted.'),
+                style: 'color: rgba(255, 255, 255, 0.7);',
+            });
+            contentBox.add_child(detailLabel);
+
+            dialog.contentLayout.add_child(contentBox);
+
+            dialog.addButton({
+                label: _('Cancel'),
+                action: () => dialog.close(global.get_current_time()),
+                key: Clutter.KEY_Escape,
+                default: true,
+            });
+
+            dialog.addButton({
+                label: _('Delete'),
+                action: () => {
+                    dialog.close(global.get_current_time());
+                    // If we're deleting the active list, switch to the first one
+                    if (index === this._activeTaskList) {
+                        const newIndex = index > 0 ? index - 1 : 0;
+                        this._syncEngine.deleteTaskList(taskList.uid).then(() => {
+                            this._showActiveTaskList(
+                                this._taskLists.length > 0 ? newIndex : null
+                            );
+                        }).catch(e => logError(e));
+                    } else {
+                        this._syncEngine.deleteTaskList(taskList.uid)
+                            .catch(e => logError(e));
+                    }
+                },
+            });
+
+            dialog.open(global.get_current_time());
         }
 
         /**
@@ -1212,7 +1497,7 @@ const Docket = GObject.registerClass(
 
                 this._taskLists = graphLists
                     .filter(list => disabled.indexOf(list.id) === -1)
-                    .map(list => ({uid: list.id, name: list.displayName}));
+                    .map(list => ({uid: list.id, name: list.displayName, backendId: list._backendId}));
 
                 if (customOrder.length) {
                     this._taskLists.sort(
@@ -2197,6 +2482,18 @@ const Docket = GObject.registerClass(
                         merge ? _('All Tasks') : taskList.name
                     );
 
+                    if (merge) {
+                        this._headerBackendIcon.visible = false;
+                    } else {
+                        const hdrIcon = this._backendIconName(taskList.backendId);
+                        if (hdrIcon) {
+                            this._headerBackendIcon.icon_name = hdrIcon;
+                            this._headerBackendIcon.visible = true;
+                        } else {
+                            this._headerBackendIcon.visible = false;
+                        }
+                    }
+
                     this._settings.set_string(
                         'last-active',
                         merge ? 'merge' : taskList.uid
@@ -2612,6 +2909,17 @@ const Docket = GObject.registerClass(
          * @param {boolean} [fullReset] - Reset vertical scrollbar adjustment.
          * @param {boolean} [refocus] - Refocus the specified task checkbox.
          */
+        _backendIconName(backendId) {
+            switch (backendId) {
+            case 'microsoft':
+                return 'weather-few-clouds-symbolic';
+            case 'todoist':
+                return 'task-due-symbolic';
+            default:
+                return null;
+            }
+        }
+
         _resetTaskBox(fullReset = false, refocus = false) {
             if (this._idleAddId) {
                 GLib.source_remove(this._idleAddId);

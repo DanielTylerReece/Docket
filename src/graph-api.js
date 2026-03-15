@@ -122,6 +122,44 @@ export class GraphApi {
         return res.body;
     }
 
+    // ── Task List CRUD ─────────────────────────────────────────────
+
+    /**
+     * Create a new task list.
+     * @param {string} displayName
+     * @returns {Promise<object>} Created task list {id, displayName, ...}
+     */
+    async createTaskList(displayName) {
+        const res = await this._client.post(`${BASE}/me/todo/lists`, {displayName});
+        this._checkStatus(res, 201);
+        return res.body;
+    }
+
+    /**
+     * Rename a task list.
+     * @param {string} listId
+     * @param {string} displayName - New name
+     * @returns {Promise<object>} Updated task list
+     */
+    async renameTaskList(listId, displayName) {
+        const res = await this._client.patch(
+            `${BASE}/me/todo/lists/${encodeURIComponent(listId)}`, {displayName}
+        );
+        this._checkStatus(res, 200);
+        return res.body;
+    }
+
+    /**
+     * Delete a task list.
+     * @param {string} listId
+     */
+    async deleteTaskList(listId) {
+        const res = await this._client.delete(
+            `${BASE}/me/todo/lists/${encodeURIComponent(listId)}`
+        );
+        this._checkStatus(res, 204);
+    }
+
     /**
      * Delta query for a task list.
      * @param {string} listId

@@ -48,6 +48,57 @@ export class TodoistApi {
         return items.map(item => TaskModel.fromTodoistJson(item, listId));
     }
 
+    // ── Project (Task List) CRUD ────────────────────────────────────
+
+    /**
+     * Create a new project (task list).
+     * @param {string} name
+     * @returns {Promise<object>} Created project {id, name, ...}
+     */
+    async createTaskList(name) {
+        const res = await this._client.post(`${REST_BASE}/projects`, {name});
+        this._checkStatus(res, 200);
+        return {
+            id: String(res.body.id),
+            displayName: res.body.name,
+            isOwner: true,
+            isShared: res.body.is_shared || false,
+            wellknownListName: 'none',
+        };
+    }
+
+    /**
+     * Rename a project (task list).
+     * @param {string} listId - Project ID
+     * @param {string} name - New name
+     * @returns {Promise<object>} Updated project
+     */
+    async renameTaskList(listId, name) {
+        const res = await this._client.post(
+            `${REST_BASE}/projects/${encodeURIComponent(listId)}`, {name}
+        );
+        this._checkStatus(res, 200);
+        return {
+            id: String(res.body.id),
+            displayName: res.body.name,
+            isOwner: true,
+            isShared: res.body.is_shared || false,
+            wellknownListName: 'none',
+        };
+    }
+
+    /**
+     * Delete a project (task list).
+     * @param {string} listId - Project ID
+     */
+    async deleteTaskList(listId) {
+        const res = await this._client.delete(
+            `${REST_BASE}/projects/${encodeURIComponent(listId)}`
+        );
+        if (res.status !== 204 && res.status !== 200)
+            this._checkStatus(res, 204);
+    }
+
     /**
      * Create a task in a project.
      * @param {string} listId - Project ID

@@ -171,6 +171,45 @@
     background-color: transparent !important;
 }
 
+/* List management — edit button in dropdown */
+.list-edit-button {
+    padding: 2px 4px;
+    background-color: transparent;
+    margin-left: 8px;
+}
+
+.list-edit-button:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+}
+
+.list-edit-icon {
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.list-edit-button:hover .list-edit-icon {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+/* List management — backend selector in create dialog */
+.list-backend-selector {
+    padding: 4px 12px;
+    border-radius: 6px;
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.list-backend-selector:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.list-backend-selected {
+    background-color: rgba(53, 132, 228, 0.4);
+}
+
+.list-backend-selected:hover {
+    background-color: rgba(53, 132, 228, 0.5);
+}
+
 /* Offline banner */
 .docket-offline-banner {
     background-color: rgba(255, 190, 0, 0.15);

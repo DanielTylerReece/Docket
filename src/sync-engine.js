@@ -195,7 +195,66 @@ export class SyncEngine {
         return this._isOffline;
     }
 
-    // ── CRUD Operations ─────────────────────────────────────────────
+    // ── Task List CRUD ─────────────────────────────────────────────
+
+    /**
+     * Create a new task list in the specified backend.
+     * @param {string} backendId - Which backend to create the list in
+     * @param {string} name - Display name for the new list
+     * @returns {Promise<object>} Created task list
+     */
+    async createTaskList(backendId, name) {
+        const backend = this._backends.get(backendId);
+        if (!backend)
+            throw new Error(`Backend '${backendId}' not registered`);
+        const list = await backend.createTaskList(name);
+        this._taskLists.push(list);
+        this._listBackendMap.set(list.id, backendId);
+        this._tasks.set(list.id, []);
+        this._saveCacheToDisk();
+        this._emit('lists-changed');
+        return list;
+    }
+
+    /**
+     * Rename a task list.
+     * @param {string} listId
+     * @param {string} newName
+     * @returns {Promise<object>} Updated task list
+     */
+    async renameTaskList(listId, newName) {
+        const backend = this._getBackendForList(listId);
+        const updated = await backend.renameTaskList(listId, newName);
+        // Update local cache
+        const idx = this._taskLists.findIndex(l => l.id === listId);
+        if (idx >= 0) {
+            this._taskLists[idx].displayName = newName;
+        }
+        this._saveCacheToDisk();
+        this._emit('lists-changed');
+        return updated;
+    }
+
+    /**
+     * Delete a task list.
+     * @param {string} listId
+     */
+    async deleteTaskList(listId) {
+        const backend = this._getBackendForList(listId);
+        await backend.deleteTaskList(listId);
+        // Remove from local cache
+        this._taskLists = this._taskLists.filter(l => l.id !== listId);
+        this._tasks.delete(listId);
+        this._listBackendMap.delete(listId);
+        // Clean up delta tokens for this list
+        const backendId = backend.id;
+        this._deltaTokens.delete(`${backendId}:${listId}`);
+        this._saveDeltaTokens();
+        this._saveCacheToDisk();
+        this._emit('lists-changed');
+    }
+
+    // ── Task CRUD ────────────────────────────────────────────────────
 
     /**
      * Create a task in the specified list, routed to the correct backend.

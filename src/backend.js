@@ -79,6 +79,34 @@ export class BackendAdapter {
         throw new Error('not implemented');
     }
 
+    /**
+     * Create a new task list.
+     * @param {string} name - Display name for the new list
+     * @returns {Promise<object>} Created task list object (must include _backendId)
+     */
+    async createTaskList(name) {
+        throw new Error('not implemented');
+    }
+
+    /**
+     * Rename a task list.
+     * @param {string} listId
+     * @param {string} newName
+     * @returns {Promise<object>} Updated task list object
+     */
+    async renameTaskList(listId, newName) {
+        throw new Error('not implemented');
+    }
+
+    /**
+     * Delete a task list.
+     * @param {string} listId
+     * @returns {Promise<void>}
+     */
+    async deleteTaskList(listId) {
+        throw new Error('not implemented');
+    }
+
     // ── Tasks ────────────────────────────────────────────────────────
 
     /**

@@ -113,6 +113,41 @@ export class TodoistBackend extends BackendAdapter {
         return lists;
     }
 
+    /**
+     * Create a new Todoist project (task list).
+     * @param {string} name
+     * @returns {Promise<object>} Created list with _backendId
+     */
+    async createTaskList(name) {
+        this._ensureApi();
+        const list = await this._api.createTaskList(name);
+        list._backendId = this.id;
+        return list;
+    }
+
+    /**
+     * Rename a Todoist project (task list).
+     * @param {string} listId
+     * @param {string} newName
+     * @returns {Promise<object>} Updated list with _backendId
+     */
+    async renameTaskList(listId, newName) {
+        this._ensureApi();
+        const list = await this._api.renameTaskList(listId, newName);
+        list._backendId = this.id;
+        return list;
+    }
+
+    /**
+     * Delete a Todoist project (task list).
+     * @param {string} listId
+     * @returns {Promise<void>}
+     */
+    async deleteTaskList(listId) {
+        this._ensureApi();
+        await this._api.deleteTaskList(listId);
+    }
+
     // ── Tasks ────────────────────────────────────────────────────────
 
     /**
