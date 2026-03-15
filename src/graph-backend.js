@@ -261,6 +261,19 @@ export class GraphBackend extends BackendAdapter {
         return this._api.updateChecklistItem(listId, taskId, itemId, patch);
     }
 
+    /**
+     * Create a checklist item (subtask) under a parent task.
+     * Uses Graph API's checklistItems endpoint.
+     * @param {string} listId
+     * @param {string} taskId - Parent task ID
+     * @param {string} title - Checklist item display name
+     * @returns {Promise<object>} Created checklist item
+     */
+    async createSubtask(listId, taskId, title) {
+        this._ensureApi();
+        return this._api.createChecklistItem(listId, taskId, {displayName: title});
+    }
+
     // ── Delta Sync ───────────────────────────────────────────────────
 
     /**

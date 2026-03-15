@@ -302,6 +302,38 @@
     background-color: rgba(53, 132, 228, 0.5);
 }
 
+/* Add subtask button — round "+" on task rows */
+.docket-column .task-add-subtask-button {
+    padding: 0;
+    margin: 0 2px;
+    min-width: 20px;
+    min-height: 20px;
+    max-width: 20px;
+    max-height: 20px;
+    border-radius: 10px;
+    background-color: transparent;
+}
+
+.docket-column .task-add-subtask-button:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.docket-column .task-add-subtask-button:active {
+    background-color: rgba(53, 132, 228, 0.5);
+}
+
+/* Override .check-box StIcon theme that makes icons transparent */
+.docket-column .task-add-subtask-icon {
+    color: rgba(255, 255, 255, 0.5) !important;
+    border: none !important;
+    border-radius: 0 !important;
+    background-color: transparent !important;
+}
+
+.docket-column .task-add-subtask-button:hover .task-add-subtask-icon {
+    color: rgba(255, 255, 255, 0.8) !important;
+}
+
 /* Offline banner */
 .docket-offline-banner {
     background-color: rgba(255, 190, 0, 0.15);

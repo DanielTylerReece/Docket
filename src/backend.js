@@ -206,6 +206,17 @@ export class BackendAdapter {
         throw new Error('not implemented');
     }
 
+    /**
+     * Create a subtask/checklist item under a parent task.
+     * @param {string} listId
+     * @param {string} taskId - Parent task ID
+     * @param {string} title - Subtask title
+     * @returns {Promise<object>} Created subtask/checklist item
+     */
+    async createSubtask(listId, taskId, title) {
+        throw new Error('not implemented');
+    }
+
     // ── Delta Sync ───────────────────────────────────────────────────
 
     /**

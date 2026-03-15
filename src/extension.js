@@ -1837,6 +1837,24 @@ const Docket = GObject.registerClass(
                 this._onDueDateTask(checkbox));
             checkbox.child.insert_child_at_index(dueDateBtn, 2);
 
+            // Add subtask "+" button — only on root tasks (not checklist items/subtasks)
+            if (root) {
+                const addSubtaskBtn = new St.Button({
+                    style_class: 'task-add-subtask-button',
+                    can_focus: true,
+                    y_align: Clutter.ActorAlign.START,
+                    child: new St.Icon({
+                        style_class: 'task-add-subtask-icon',
+                        icon_name: 'list-add-symbolic',
+                        icon_size: 12,
+                    }),
+                });
+                addSubtaskBtn.connect('clicked', () =>
+                    this._onAddSubtask(checkbox));
+                // Append after all other children (rightmost position)
+                checkbox.child.add_child(addSubtaskBtn);
+            }
+
             return checkbox;
         }
 
@@ -2495,6 +2513,74 @@ const Docket = GObject.registerClass(
             // replacement (tasks-changed → _idleAddHelper) causes the
             // Clutter unmap assertion crash.  Only explicit user actions
             // (Enter / Escape) trigger cleanup.
+        }
+
+        /**
+         * Handles adding a subtask via an inline entry below the task row.
+         * Shows a text entry; Enter creates the subtask, Escape cancels.
+         * @param {CheckBox.CheckBox} checkbox - The parent task checkbox.
+         */
+        _onAddSubtask(checkbox) {
+            const task = checkbox._task;
+
+            // Block tree rebuilds while the subtask entry is visible
+            this._editingTask = true;
+
+            // Create inline entry for subtask name
+            const entry = new St.Entry({
+                hint_text: _('Add a subtask...'),
+                can_focus: true,
+                x_expand: true,
+                style: 'padding: 2px 4px; margin-left: 24px; margin-top: 2px; margin-bottom: 2px;',
+            });
+
+            // Insert the entry right after the checkbox in the parent taskBox
+            const taskBox = checkbox.get_parent();
+            if (!taskBox) {
+                this._editingTask = false;
+                return;
+            }
+            const checkboxIndex = taskBox.get_children().indexOf(checkbox);
+            taskBox.insert_child_at_index(entry, checkboxIndex + 1);
+
+            // Focus the entry
+            entry.grab_key_focus();
+
+            let cleaned = false;
+            const cleanup = () => {
+                if (cleaned) return;
+                cleaned = true;
+                this._editingTask = false;
+                try {
+                    if (entry && !entry.is_finalized?.() && entry.get_parent()) {
+                        entry.get_parent().remove_child(entry);
+                        entry.destroy();
+                    }
+                } catch (e) {
+                    // Widget already destroyed — ignore
+                }
+                this._onSyncUpdate();
+            };
+
+            // Enter = create subtask
+            entry.get_clutter_text().connect('activate', () => {
+                const title = entry.get_text().trim();
+                cleanup();
+                if (title) {
+                    this._syncEngine.createSubtask(
+                        task._taskList, task.id, title
+                    ).catch(e => logError(e));
+                }
+            });
+
+            // Escape = cancel
+            entry.get_clutter_text().connect('key-press-event', (_actor, event) => {
+                if (event.get_key_symbol() === Clutter.KEY_Escape) {
+                    cleanup();
+                    return Clutter.EVENT_STOP;
+                }
+                return Clutter.EVENT_PROPAGATE;
+            });
         }
 
         /**

@@ -268,6 +268,19 @@ export class TodoistBackend extends BackendAdapter {
         return this._api.updateTask(listId, itemId, {status});
     }
 
+    /**
+     * Create a subtask (child task) under a parent task.
+     * Todoist subtasks are full tasks with parent_id set.
+     * @param {string} listId - Project ID
+     * @param {string} taskId - Parent task ID
+     * @param {string} title - Subtask title
+     * @returns {Promise<object>} Created subtask (internal model)
+     */
+    async createSubtask(listId, taskId, title) {
+        this._ensureApi();
+        return this._api.createSubtask(listId, taskId, title);
+    }
+
     // ── Delta Sync ───────────────────────────────────────────────────
 
     /**

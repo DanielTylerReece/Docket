@@ -345,6 +345,20 @@ export class SyncEngine {
     }
 
     /**
+     * Create a subtask/checklist item under a parent task.
+     * Routes to the correct backend based on the list's backend.
+     * @param {string} listId
+     * @param {string} taskId - Parent task ID
+     * @param {string} title - Subtask title
+     */
+    async createSubtask(listId, taskId, title) {
+        const backend = this._getBackendForList(listId);
+        await backend.createSubtask(listId, taskId, title);
+        // Full sync to pick up the new subtask in the task tree
+        await this.fullSync();
+    }
+
+    /**
      * Toggle a checklist item's checked state.
      */
     async toggleChecklistItem(listId, taskId, itemId) {

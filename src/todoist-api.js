@@ -120,6 +120,24 @@ export class TodoistApi {
     }
 
     /**
+     * Create a subtask (child task) under a parent task.
+     * @param {string} listId - Project ID
+     * @param {string} parentId - Parent task ID
+     * @param {string} title - Subtask title
+     * @returns {Promise<object>} Created subtask (internal model)
+     */
+    async createSubtask(listId, parentId, title) {
+        const body = {
+            content: title,
+            project_id: listId,
+            parent_id: parentId,
+        };
+        const res = await this._client.post(`${REST_BASE}/tasks`, body);
+        this._checkStatus(res, 200);
+        return TaskModel.fromTodoistJson(res.body, listId);
+    }
+
+    /**
      * Update a task. Handles title, status (complete/uncomplete) changes.
      * @param {string} listId - Project ID
      * @param {string} taskId - Task ID
