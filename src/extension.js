@@ -1068,23 +1068,27 @@ const Docket = GObject.registerClass(
                     item.insert_child_below(icon, item.label);
                 }
 
-                // Edit button for renaming the list
-                const editBtn = new St.Button({
-                    style_class: 'list-edit-button',
-                    can_focus: true,
-                    child: new St.Icon({
-                        style_class: 'list-edit-icon',
-                        icon_name: 'document-edit-symbolic',
-                        icon_size: 14,
-                    }),
-                    x_align: Clutter.ActorAlign.END,
-                    y_align: Clutter.ActorAlign.CENTER,
-                });
-                editBtn.connect('clicked', () => {
-                    this._taskListMenu.close();
-                    this._onEditTaskList(taskList, index);
-                });
-                item.add_child(editBtn);
+                // Edit button for renaming — hide for immutable system lists
+                // (Flagged Emails can't be renamed or deleted)
+                const immutable = taskList.wellknownListName === 'flaggedEmails';
+                if (!immutable) {
+                    const editBtn = new St.Button({
+                        style_class: 'list-edit-button',
+                        can_focus: true,
+                        child: new St.Icon({
+                            style_class: 'list-edit-icon',
+                            icon_name: 'document-edit-symbolic',
+                            icon_size: 14,
+                        }),
+                        x_align: Clutter.ActorAlign.END,
+                        y_align: Clutter.ActorAlign.CENTER,
+                    });
+                    editBtn.connect('clicked', () => {
+                        this._taskListMenu.close();
+                        this._onEditTaskList(taskList, index);
+                    });
+                    item.add_child(editBtn);
+                }
 
                 if (index === this._activeTaskList && !this._mergeTaskLists)
                     item.setOrnament(PopupMenu.Ornament.DOT);
@@ -1268,14 +1272,18 @@ const Docket = GObject.registerClass(
 
             dialog.contentLayout.add_child(contentBox);
 
-            // Delete button
-            dialog.addButton({
-                label: _('Delete'),
-                action: () => {
-                    dialog.close(global.get_current_time());
-                    this._onDeleteTaskList(taskList, index);
-                },
-            });
+            // Delete button — hide for Microsoft system lists (e.g. Flagged Emails, Tasks)
+            const isSystemList = taskList.wellknownListName &&
+                taskList.wellknownListName !== 'none';
+            if (!isSystemList) {
+                dialog.addButton({
+                    label: _('Delete'),
+                    action: () => {
+                        dialog.close(global.get_current_time());
+                        this._onDeleteTaskList(taskList, index);
+                    },
+                });
+            }
 
             dialog.addButton({
                 label: _('Cancel'),
@@ -1507,7 +1515,7 @@ const Docket = GObject.registerClass(
 
                 this._taskLists = graphLists
                     .filter(list => disabled.indexOf(list.id) === -1)
-                    .map(list => ({uid: list.id, name: list.displayName, backendId: list._backendId}));
+                    .map(list => ({uid: list.id, name: list.displayName, backendId: list._backendId, wellknownListName: list.wellknownListName}));
 
                 if (customOrder.length) {
                     this._taskLists.sort(
