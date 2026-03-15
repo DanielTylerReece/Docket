@@ -28,6 +28,8 @@ try {
     HAS_GRAPH = false;
 }
 
+import { TodoistAuthManager } from './todoist-auth.js';
+
 /**
  * Enables the use of context in translation of plurals.
  *
@@ -453,6 +455,129 @@ const DocketSettings = GObject.registerClass(
 
             this._authGroup = authGroup;
             this.add(authGroup);
+
+            // Rebuild Todoist section (remove old one first if it exists)
+            if (this._todoistGroup) {
+                this.remove(this._todoistGroup);
+                this._todoistGroup = null;
+            }
+            this._buildTodoistSection();
+        }
+
+        /**
+         * Builds the Todoist Account auth section.
+         */
+        _buildTodoistSection() {
+            const todoistGroup = new Adw.PreferencesGroup({
+                title: _('Todoist Account'),
+                description: _('Connect your Todoist account using an API token'),
+            });
+
+            // Status row
+            this._todoistStatusRow = new Adw.ActionRow({
+                title: _('Status'),
+            });
+
+            // Check if already authenticated
+            const todoistAuth = new TodoistAuthManager();
+            todoistAuth.loadTokens().then(loaded => {
+                if (loaded && todoistAuth.isAuthenticated()) {
+                    this._todoistStatusRow.set_subtitle(_('Connected'));
+                    this._todoistSignOutButton.sensitive = true;
+                } else {
+                    this._todoistStatusRow.set_subtitle(_('Not connected'));
+                }
+                todoistAuth.destroy();
+            }).catch(() => {
+                this._todoistStatusRow.set_subtitle(_('Not connected'));
+            });
+            todoistGroup.add(this._todoistStatusRow);
+
+            // Token entry row
+            const tokenRow = new Adw.ActionRow({
+                title: _('API Token'),
+                subtitle: _('Find at Settings > Integrations > Developer'),
+            });
+            this._todoistTokenEntry = new Gtk.PasswordEntry({
+                show_peek_icon: true,
+                placeholder_text: _('Paste your Todoist API token'),
+                valign: Gtk.Align.CENTER,
+                hexpand: true,
+            });
+            tokenRow.add_suffix(this._todoistTokenEntry);
+            todoistGroup.add(tokenRow);
+
+            // Buttons row
+            const todoistButtonRow = new Adw.ActionRow();
+
+            const todoistButtonBox = new Gtk.Box({
+                orientation: Gtk.Orientation.HORIZONTAL,
+                spacing: 8,
+                halign: Gtk.Align.END,
+                valign: Gtk.Align.CENTER,
+            });
+
+            const saveTokenButton = new Gtk.Button({ label: _('Save Token') });
+            saveTokenButton.add_css_class('suggested-action');
+            saveTokenButton.connect('clicked', () => this._onTodoistSaveToken());
+
+            this._todoistSignOutButton = new Gtk.Button({ label: _('Sign Out') });
+            this._todoistSignOutButton.add_css_class('destructive-action');
+            this._todoistSignOutButton.sensitive = false;
+            this._todoistSignOutButton.connect('clicked', () => this._onTodoistSignOut());
+
+            todoistButtonBox.append(saveTokenButton);
+            todoistButtonBox.append(this._todoistSignOutButton);
+            todoistButtonRow.add_suffix(todoistButtonBox);
+            todoistGroup.add(todoistButtonRow);
+
+            this._todoistGroup = todoistGroup;
+            this.add(todoistGroup);
+        }
+
+        /**
+         * Handles saving a Todoist API token.
+         *
+         * @async
+         */
+        async _onTodoistSaveToken() {
+            const token = this._todoistTokenEntry.get_text().trim();
+            if (!token) return;
+
+            this._todoistStatusRow.set_subtitle(_('Validating...'));
+
+            const auth = new TodoistAuthManager();
+            try {
+                await auth.storeToken(token);
+                this._todoistStatusRow.set_subtitle(_('Connected'));
+                this._todoistSignOutButton.sensitive = true;
+                this._todoistTokenEntry.set_text('');
+                // Signal the extension to reload backends
+                this._settings.set_string('todoist-auth-event', `signin-${Date.now()}`);
+            } catch (e) {
+                this._todoistStatusRow.set_subtitle(
+                    _('Invalid token \u2014 please check and try again')
+                );
+            } finally {
+                auth.destroy();
+            }
+        }
+
+        /**
+         * Handles Todoist sign-out: clears tokens and resets the UI.
+         *
+         * @async
+         */
+        async _onTodoistSignOut() {
+            const auth = new TodoistAuthManager();
+            try {
+                await auth.clearTokens();
+            } catch { /* ignore */ }
+            auth.destroy();
+
+            this._todoistStatusRow.set_subtitle(_('Not connected'));
+            this._todoistSignOutButton.sensitive = false;
+            this._settings.set_string('todoist-auth-event', `signout-${Date.now()}`);
         }
 
         /**

@@ -56,5 +56,15 @@
       <default>""</default>
       <summary>Timestamp written by prefs on sign-in/sign-out to trigger extension reload</summary>
     </key>
+    <key name="todoist-delta-tokens" type="s">
+      <default>'{}'</default>
+      <summary>Todoist sync tokens</summary>
+      <description>JSON map of sync tokens for Todoist incremental sync</description>
+    </key>
+    <key name="todoist-auth-event" type="s">
+      <default>''</default>
+      <summary>Todoist auth event trigger</summary>
+      <description>Timestamp trigger for Todoist sign-in/sign-out events. Used to sync auth state between prefs and extension processes.</description>
+    </key>
   </schema>
 </schemalist>

@@ -26,7 +26,8 @@ import {
 const DateMenu = Main.panel.statusArea.dateMenu.menu;
 const NC_ = (c, s) => pgettext(c, s);
 
-import { AuthManager } from './auth.js';
+import { GraphBackend } from './graph-backend.js';
+import { TodoistBackend } from './todoist-backend.js';
 import { SyncEngine } from './sync-engine.js';
 import { TaskModel, sortByName, sortByDueDate, sortByPriority } from './task-model.js';
 
@@ -183,24 +184,44 @@ const Docket = GObject.registerClass(
                 // Facilitates lazy loading of tasks.
                 this._upperLimit = 0;
 
-                // Initialize Graph API sync engine
-                this._authManager = new AuthManager();
-                let tokensLoaded = false;
+                // Initialize backends
+                this._backends = new Map();
+                this._pendingBackends = [];
+
+                // Microsoft Graph backend
+                const graphBackend = new GraphBackend();
                 try {
-                    tokensLoaded = await this._authManager.loadTokens();
+                    const graphLoaded = await graphBackend.loadTokens();
+                    if (graphLoaded && graphBackend.isAuthenticated())
+                        this._backends.set('microsoft', graphBackend);
                 } catch (e) {
-                    // Keyring may be locked after screen unlock — retry
-                    console.log('[docket] Keyring inaccessible, scheduling retry...');
+                    console.log('[docket] Microsoft keyring load failed, will retry');
+                    this._pendingBackends.push(graphBackend);
+                }
+
+                // Todoist backend
+                const todoistBackend = new TodoistBackend();
+                try {
+                    const todoistLoaded = await todoistBackend.loadTokens();
+                    if (todoistLoaded && todoistBackend.isAuthenticated())
+                        this._backends.set('todoist', todoistBackend);
+                } catch (e) {
+                    console.log('[docket] Todoist keyring load failed, will retry');
+                    this._pendingBackends.push(todoistBackend);
+                }
+
+                // If keyring failures left pending backends, schedule retry
+                if (this._pendingBackends.length > 0 && this._backends.size === 0) {
+                    console.log('[docket] No backends loaded, scheduling retry...');
                     this._tokenRetryCount = 0;
                     this._tokenRetryId = GLib.timeout_add_seconds(
                         GLib.PRIORITY_DEFAULT, 2, () => {
                             if (this._destroyed) return GLib.SOURCE_REMOVE;
                             this._tokenRetryCount++;
-                            if (!this._authManager) return GLib.SOURCE_REMOVE;
-                            this._authManager.loadTokens().then(loaded => {
-                                if (this._destroyed || !this._authManager) return;
-                                if (loaded) {
-                                    console.log('[docket] Tokens loaded on retry');
+                            this._retryPendingBackends().then(anyLoaded => {
+                                if (this._destroyed) return;
+                                if (anyLoaded) {
+                                    console.log('[docket] Backends loaded on retry');
                                     this._tokenRetryId = 0;
                                     this._initAfterTokens(themeContext).catch(
                                         err => logError(err)
@@ -240,7 +261,7 @@ const Docket = GObject.registerClass(
          */
         async _initAfterTokens(themeContext) {
             this._syncEngine = new SyncEngine(
-                this._authManager, this._settings
+                this._backends, this._settings
             );
 
             this._syncEngine.connect('tasks-changed', () => {
@@ -251,7 +272,27 @@ const Docket = GObject.registerClass(
                 this._showActiveTaskList(this._activeTaskList || 0);
             });
             this._syncEngine.connect('auth-required', () => {
-                this._showPlaceholderWithStatus('missing-dependencies');
+                // Only show auth prompt if NO backends are authenticated
+                const anyAuth = [...this._backends.values()].some(b => b.isAuthenticated());
+                if (!anyAuth)
+                    this._showPlaceholderWithStatus('missing-dependencies');
+            });
+
+            this._syncEngine.connect('offline', () => {
+                if (this._offlineBanner) {
+                    const lastSync = this._syncEngine.getLastSyncTime();
+                    const ago = lastSync ? this._formatTimeAgo(lastSync) : '';
+                    this._offlineLabel.set_text(
+                        ago ? `No internet \u2014 showing cached tasks from ${ago}`
+                            : 'No internet \u2014 showing cached tasks'
+                    );
+                    this._offlineBanner.visible = true;
+                }
+            });
+
+            this._syncEngine.connect('online', () => {
+                if (this._offlineBanner)
+                    this._offlineBanner.visible = false;
             });
 
             try {
@@ -266,6 +307,26 @@ const Docket = GObject.registerClass(
             }
 
             this._storeTaskLists(true);
+
+            // Offline banner (hidden by default)
+            this._offlineBanner = new St.BoxLayout({
+                style_class: 'docket-offline-banner',
+                visible: false,
+                x_expand: true,
+            });
+            const offlineIcon = new St.Icon({
+                icon_name: 'network-offline-symbolic',
+                icon_size: 16,
+                y_align: Clutter.ActorAlign.CENTER,
+            });
+            this._offlineLabel = new St.Label({
+                text: 'No internet \u2014 showing cached tasks',
+                y_align: Clutter.ActorAlign.CENTER,
+            });
+            this._offlineBanner.add_child(offlineIcon);
+            this._offlineBanner.add_child(this._offlineLabel);
+            this._contentBox.insert_child_at_index(this._offlineBanner, 0);
+
             this._buildHeader();
 
             this._buildQuickAddEntry();
@@ -2188,9 +2249,15 @@ const Docket = GObject.registerClass(
                         this._syncEngine.destroy();
                         this._syncEngine = null;
                     }
-                    if (this._authManager) {
-                        this._authManager.destroy();
-                        this._authManager = null;
+                    if (this._backends) {
+                        for (const [, backend] of this._backends)
+                            backend.destroy();
+                        this._backends = null;
+                    }
+                    if (this._pendingBackends) {
+                        for (const backend of this._pendingBackends)
+                            backend.destroy();
+                        this._pendingBackends = null;
                     }
                     if (this._filterMenu) {
                         if (this._filterMenu.actor.get_parent() === Main.uiGroup)
@@ -2233,6 +2300,108 @@ const Docket = GObject.registerClass(
                     }
                 }
             );
+
+            // Todoist auth event listener
+            if (!this._settingsTodoistAuthId) {
+                this._settingsTodoistAuthId = this._settings.connect(
+                    'changed::todoist-auth-event',
+                    () => {
+                        // Todoist token changed in prefs — reload backends
+                        this._reinitBackends();
+                    }
+                );
+            }
+        }
+
+        /**
+         * Re-initialize all backends and the sync engine.
+         * Used when auth state changes (e.g. Todoist token added/removed).
+         */
+        async _reinitBackends() {
+            // Destroy existing sync engine
+            if (this._syncEngine) {
+                this._syncEngine.destroy();
+                this._syncEngine = null;
+            }
+
+            // Destroy existing backends
+            if (this._backends) {
+                for (const [, backend] of this._backends)
+                    backend.destroy();
+                this._backends = null;
+            }
+            if (this._pendingBackends) {
+                for (const backend of this._pendingBackends)
+                    backend.destroy();
+                this._pendingBackends = null;
+            }
+
+            // Tear down UI for full re-init
+            if (this._filterMenu) {
+                if (this._filterMenu.actor.get_parent() === Main.uiGroup)
+                    Main.uiGroup.remove_child(this._filterMenu.actor);
+                this._filterMenu.destroy();
+                this._filterMenu = null;
+            }
+            if (this._settingsFilterId) {
+                this._settings.disconnect(this._settingsFilterId);
+                this._settingsFilterId = 0;
+            }
+            if (this._completedMenu) {
+                if (this._completedMenu.actor.get_parent() === Main.uiGroup)
+                    Main.uiGroup.remove_child(this._completedMenu.actor);
+                this._completedMenu.destroy();
+                this._completedMenu = null;
+            }
+            if (this._settingsCompletedId) {
+                this._settings.disconnect(this._settingsCompletedId);
+                this._settingsCompletedId = 0;
+            }
+            if (this._contentBox) {
+                this._contentBox.destroy();
+                this._contentBox = null;
+            }
+            if (this._onMenuOpenId) {
+                DateMenu.disconnect(this._onMenuOpenId);
+                this._onMenuOpenId = 0;
+            }
+            if (this._settingsChangedId) {
+                this._settings.disconnect(this._settingsChangedId);
+                this._settingsChangedId = 0;
+            }
+            this._linkLabel.hide();
+
+            // Re-initialize everything
+            await this._initTaskLists();
+        }
+
+        /**
+         * Attempt to load tokens for any pending backends.
+         * @returns {Promise<boolean>} true if at least one backend loaded.
+         */
+        async _retryPendingBackends() {
+            if (!this._pendingBackends || !this._pendingBackends.length)
+                return false;
+
+            const stillPending = [];
+            let anyLoaded = false;
+
+            for (const backend of this._pendingBackends) {
+                try {
+                    const loaded = await backend.loadTokens();
+                    if (loaded && backend.isAuthenticated()) {
+                        this._backends.set(backend.id, backend);
+                        anyLoaded = true;
+                    } else {
+                        stillPending.push(backend);
+                    }
+                } catch (e) {
+                    stillPending.push(backend);
+                }
+            }
+
+            this._pendingBackends = stillPending;
+            return anyLoaded;
         }
 
         /**
@@ -2241,6 +2410,23 @@ const Docket = GObject.registerClass(
          * @param {string} status - String to differentiate between various
          * statuses of the placeholder.
          */
+        /**
+         * Formats a Date into a human-readable relative time string.
+         *
+         * @param {Date} date - Date to format.
+         * @returns {string} Relative time string (e.g. "5m ago").
+         */
+        _formatTimeAgo(date) {
+            const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+            if (seconds < 60) return 'just now';
+            const minutes = Math.floor(seconds / 60);
+            if (minutes < 60) return `${minutes}m ago`;
+            const hours = Math.floor(minutes / 60);
+            if (hours < 24) return `${hours}h ago`;
+            const days = Math.floor(hours / 24);
+            return `${days}d ago`;
+        }
+
         _showPlaceholderWithStatus(status) {
             this._taskLists = [];
             this._showActiveTaskList(null);
@@ -2705,6 +2891,11 @@ const Docket = GObject.registerClass(
             if (this._authWatchId)
                 this._settings.disconnect(this._authWatchId);
 
+            if (this._settingsTodoistAuthId) {
+                this._settings.disconnect(this._settingsTodoistAuthId);
+                this._settingsTodoistAuthId = 0;
+            }
+
             if (this._tokenRetryId) {
                 GLib.source_remove(this._tokenRetryId);
                 this._tokenRetryId = 0;
@@ -2726,9 +2917,16 @@ const Docket = GObject.registerClass(
                 this._syncEngine = null;
             }
 
-            if (this._authManager) {
-                this._authManager.destroy();
-                this._authManager = null;
+            if (this._backends) {
+                for (const [, backend] of this._backends)
+                    backend.destroy();
+                this._backends = null;
+            }
+
+            if (this._pendingBackends) {
+                for (const backend of this._pendingBackends)
+                    backend.destroy();
+                this._pendingBackends = null;
             }
 
             Utils.removeDebounceTimeouts_();

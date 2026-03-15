@@ -170,3 +170,21 @@
     border-radius: 0 !important;
     background-color: transparent !important;
 }
+
+/* Offline banner */
+.docket-offline-banner {
+    background-color: rgba(255, 190, 0, 0.15);
+    border-radius: 6px;
+    padding: 6px 10px;
+    margin: 4px 8px;
+    spacing: 8px;
+}
+
+.docket-offline-banner StIcon {
+    color: rgba(255, 190, 0, 0.8);
+}
+
+.docket-offline-banner StLabel {
+    font-size: 0.85em;
+    color: rgba(255, 255, 255, 0.7);
+}

@@ -1,8 +1,9 @@
 'use strict';
 
 /**
- * Data model for Microsoft Graph To Do tasks.
- * Converts between Graph JSON and the internal model used by the extension UI.
+ * Data model for task objects.
+ * Converts between backend JSON (Graph API, Todoist) and the internal model
+ * used by the extension UI.
  */
 export class TaskModel {
     /**
@@ -46,6 +47,57 @@ export class TaskModel {
             get _due() { return this.dueDateTime; },
             get _taskList() { return this.listId; },
         };
+    }
+
+    /**
+     * Convert a Todoist REST API task JSON object to the internal model.
+     *
+     * Priority mapping (Todoist values are inverted from display):
+     *   4 = p1 (urgent/red)  → 'high'
+     *   3 = p2 (orange)      → 'high'
+     *   2 = p3 (yellow)      → 'normal'
+     *   1 = p4 (default)     → 'low'
+     *
+     * @param {object} item - Todoist task JSON from REST API v2
+     * @param {string} [projectId] - Override project_id (e.g. from list context)
+     * @returns {object} Internal task model
+     */
+    static fromTodoistJson(item, projectId) {
+        const task = {
+            id: String(item.id),
+            listId: projectId || String(item.project_id),
+            title: item.content,
+            status: item.is_completed ? 'completed' : 'notStarted',
+            importance: item.priority >= 3 ? 'high' : (item.priority === 2 ? 'normal' : 'low'),
+            dueDateTime: null,
+            completedDateTime: item.completed_at ? new Date(item.completed_at) : null,
+            createdDateTime: item.created_at ? new Date(item.created_at) : null,
+            lastModifiedDateTime: null,
+            body: item.description ? {content: item.description, contentType: 'text'} : null,
+            categories: item.labels || [],
+            checklistItems: [],  // Todoist uses subtasks instead
+            _parentTaskId: item.parent_id ? String(item.parent_id) : null,
+            _order: item.order,
+            _isRecurring: item.due?.is_recurring || false,
+            _sectionId: item.section_id ? String(item.section_id) : null,
+        };
+
+        // Due date — prefer datetime over date-only
+        if (item.due) {
+            if (item.due.datetime)
+                task.dueDateTime = new Date(item.due.datetime);
+            else if (item.due.date)
+                task.dueDateTime = new Date(item.due.date + 'T00:00:00Z');
+        }
+
+        // Getter aliases (match fromGraphJson pattern exactly)
+        Object.defineProperties(task, {
+            '_uid':      { get() { return this.id; } },
+            '_due':      { get() { return this.dueDateTime; } },
+            '_taskList': { get() { return this.listId; } },
+        });
+
+        return task;
     }
 
     /**
@@ -121,6 +173,85 @@ export class TaskModel {
             payload.categories = changes.categories;
 
         return payload;
+    }
+
+    /**
+     * Serialize a task object for JSON storage (offline cache).
+     * Converts Date objects to ISO strings and preserves all data fields.
+     * Getter aliases (_uid, _due, _taskList) are non-enumerable and won't
+     * appear in JSON.stringify, but we explicitly exclude them for clarity.
+     * @param {object} task - Internal task model object
+     * @returns {object} Plain object suitable for JSON.stringify
+     */
+    static serialize(task) {
+        return {
+            id: task.id,
+            listId: task.listId,
+            title: task.title,
+            status: task.status,
+            importance: task.importance,
+            dueDateTime: task.dueDateTime?.toISOString() || null,
+            completedDateTime: task.completedDateTime?.toISOString() || null,
+            createdDateTime: task.createdDateTime?.toISOString() || null,
+            lastModifiedDateTime: task.lastModifiedDateTime?.toISOString() || null,
+            body: task.body,
+            categories: task.categories || [],
+            checklistItems: (task.checklistItems || []).map(ci => ({
+                id: ci.id,
+                displayName: ci.displayName,
+                isChecked: ci.isChecked,
+                checkedDateTime: ci.checkedDateTime instanceof Date
+                    ? ci.checkedDateTime.toISOString()
+                    : ci.checkedDateTime || null,
+            })),
+            // Todoist-specific fields (null for Graph tasks — that's fine)
+            _parentTaskId: task._parentTaskId || null,
+            _order: task._order ?? null,
+            _isRecurring: task._isRecurring || false,
+            _sectionId: task._sectionId || null,
+        };
+    }
+
+    /**
+     * Restore a task from JSON storage (offline cache).
+     * Converts ISO strings back to Date objects and re-attaches
+     * getter aliases (_uid, _due, _taskList) via Object.defineProperties.
+     * @param {object} obj - Plain object from JSON.parse
+     * @returns {object} Internal task model object
+     */
+    static deserialize(obj) {
+        const task = {
+            id: obj.id,
+            listId: obj.listId,
+            title: obj.title,
+            status: obj.status,
+            importance: obj.importance,
+            dueDateTime: obj.dueDateTime ? new Date(obj.dueDateTime) : null,
+            completedDateTime: obj.completedDateTime ? new Date(obj.completedDateTime) : null,
+            createdDateTime: obj.createdDateTime ? new Date(obj.createdDateTime) : null,
+            lastModifiedDateTime: obj.lastModifiedDateTime ? new Date(obj.lastModifiedDateTime) : null,
+            body: obj.body || null,
+            categories: obj.categories || [],
+            checklistItems: (obj.checklistItems || []).map(ci => ({
+                id: ci.id,
+                displayName: ci.displayName,
+                isChecked: ci.isChecked,
+                checkedDateTime: ci.checkedDateTime ? new Date(ci.checkedDateTime) : null,
+            })),
+            _parentTaskId: obj._parentTaskId || null,
+            _order: obj._order ?? null,
+            _isRecurring: obj._isRecurring || false,
+            _sectionId: obj._sectionId || null,
+        };
+
+        // Re-attach getter aliases (same pattern as fromGraphJson)
+        Object.defineProperties(task, {
+            '_uid':      { get() { return this.id; } },
+            '_due':      { get() { return this.dueDateTime; } },
+            '_taskList': { get() { return this.listId; } },
+        });
+
+        return task;
     }
 }
 
