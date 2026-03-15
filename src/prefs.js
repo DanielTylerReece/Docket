@@ -1015,7 +1015,13 @@ const SettingsMenuButton = GObject.registerClass(
             this._aboutDialog.program_name = _(this._metadata.name);
             this._aboutDialog.version = this._metadata.version.toString();
             this._aboutDialog.website = this._metadata.url;
-            this._aboutDialog.comments = _(this._metadata.description);
+            this._aboutDialog.comments = _(this._metadata.description) +
+                '\n\n' +
+                'Microsoft To Do is a trademark of Microsoft Corporation. ' +
+                'This extension is not affiliated with or endorsed by Microsoft.' +
+                '\n\n' +
+                'Todoist is a trademark of Doist Inc. ' +
+                'This extension is not created by, affiliated with, or supported by Doist.';
 
             this._aboutDialog.translator_credits =
                 /* Translators: put down your name/nickname and email (optional)
