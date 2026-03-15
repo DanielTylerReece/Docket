@@ -184,9 +184,83 @@
     background-color: transparent !important;
 }
 
-/* Inline calendar on task rows */
+/* Inline date spinner picker on task rows */
 .docket-column .task-duedate-calendar {
     margin: 2px 0 4px 24px;
+}
+
+.docket-column .date-spinner-picker {
+    padding: 8px;
+    border-radius: 6px;
+    background-color: rgba(255, 255, 255, 0.05);
+    spacing: 6px;
+}
+
+.docket-column .date-spinner-row {
+    spacing: 12px;
+}
+
+.docket-column .date-spinner {
+    spacing: 2px;
+    min-width: 80px;
+}
+
+.docket-column .date-spinner-arrow {
+    padding: 2px 8px;
+    border-radius: 4px;
+    background-color: transparent;
+}
+
+.docket-column .date-spinner-arrow:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.docket-column .date-spinner-arrow:active {
+    background-color: rgba(53, 132, 228, 0.5);
+}
+
+/* Override .check-box StIcon theme that makes icons transparent */
+.docket-column .date-spinner-arrow StIcon {
+    color: rgba(255, 255, 255, 0.7) !important;
+    border: none !important;
+    border-radius: 0 !important;
+    background-color: transparent !important;
+}
+
+.docket-column .date-spinner-arrow:hover StIcon {
+    color: rgba(255, 255, 255, 0.9) !important;
+}
+
+.docket-column .date-spinner-value {
+    font-weight: bold;
+    font-size: 1.0em;
+    padding: 4px 8px;
+    min-height: 20px;
+    text-align: center;
+}
+
+.docket-column .date-spinner-month {
+    min-width: 80px;
+}
+
+.docket-column .date-spinner-day {
+    min-width: 36px;
+}
+
+.docket-column .date-spinner-year {
+    font-size: 0.85em;
+    color: rgba(255, 255, 255, 0.5);
+    padding: 0 4px;
+}
+
+.docket-column .date-spinner-actions {
+    spacing: 8px;
+    margin-top: 4px;
+}
+
+.docket-column .date-spinner-action-btn {
+    font-size: 0.85em;
+    padding: 4px 8px;
 }
 
 /* List management — edit button in dropdown */

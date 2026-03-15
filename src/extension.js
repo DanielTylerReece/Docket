@@ -2490,7 +2490,9 @@ const Docket = GObject.registerClass(
         }
 
         /**
-         * Handles due date editing for a task via an inline calendar picker.
+         * Handles due date editing for a task via an inline spinner picker.
+         * Two side-by-side spinners (Month | Day) with up/down arrows,
+         * plus Today / Clear / OK action buttons.
          * @param {CheckBox.CheckBox} checkbox - The checkbox whose task to edit.
          */
         _onDueDateTask(checkbox) {
@@ -2509,116 +2511,169 @@ const Docket = GObject.registerClass(
                 this._activeDueDatePicker = null;
             }
 
-            let viewDate = task.dueDateTime
+            // Initialize selected month/day/year from task or today
+            const initDate = task.dueDateTime
                 ? new Date(task.dueDateTime)
                 : new Date();
-            let selectedDate = task.dueDateTime
-                ? new Date(task.dueDateTime)
-                : null;
+            let selMonth = initDate.getMonth();     // 0-11
+            let selDay = initDate.getDate();         // 1-31
+            let selYear = initDate.getFullYear();
 
-            // Build the inline calendar picker
+            const monthNames = [
+                _('January'), _('February'), _('March'), _('April'),
+                _('May'), _('June'), _('July'), _('August'),
+                _('September'), _('October'), _('November'),
+                _('December'),
+            ];
+
+            // Helper: days in a given month/year
+            function daysInMonth(month, year) {
+                return new Date(year, month + 1, 0).getDate();
+            }
+
+            // Helper: clamp day to valid range for current month
+            function clampDay() {
+                const max = daysInMonth(selMonth, selYear);
+                if (selDay > max) selDay = max;
+            }
+
+            // Helper: update all display labels
+            function updateDisplay() {
+                monthValueLabel.text = monthNames[selMonth];
+                dayValueLabel.text = `${selDay}`;
+                yearLabel.text = `${selYear}`;
+            }
+
+            // Build the inline spinner picker
             const picker = new St.BoxLayout({
                 orientation: Clutter.Orientation.VERTICAL,
-                style_class: 'quick-add-calendar task-duedate-calendar',
+                style_class: 'task-duedate-calendar date-spinner-picker',
             });
             this._activeDueDatePicker = picker;
 
-            // Navigation: < Month Year >
-            const navRow = new St.BoxLayout({x_expand: true});
-
-            const prevBtn = new St.Button({
-                style_class: 'calendar-change-month-back pager-button',
-                can_focus: true,
-                child: new St.Icon({icon_name: 'pan-start-symbolic'}),
-            });
-
-            const monthLabel = new St.Label({
+            // -- Spinner row: [Month spinner] [Year label] [Day spinner]
+            const spinnerRow = new St.BoxLayout({
                 x_expand: true,
                 x_align: Clutter.ActorAlign.CENTER,
-                y_align: Clutter.ActorAlign.CENTER,
-                style: 'font-weight: bold;',
+                style_class: 'date-spinner-row',
             });
 
-            const nextBtn = new St.Button({
-                style_class: 'calendar-change-month-forward pager-button',
+            // Month spinner (vertical: up arrow, value, down arrow)
+            const monthSpinner = new St.BoxLayout({
+                orientation: Clutter.Orientation.VERTICAL,
+                x_align: Clutter.ActorAlign.CENTER,
+                style_class: 'date-spinner',
+            });
+
+            const monthUpBtn = new St.Button({
+                style_class: 'date-spinner-arrow',
                 can_focus: true,
-                child: new St.Icon({icon_name: 'pan-end-symbolic'}),
+                child: new St.Icon({
+                    icon_name: 'pan-up-symbolic',
+                    icon_size: 16,
+                }),
             });
 
-            navRow.add_child(prevBtn);
-            navRow.add_child(monthLabel);
-            navRow.add_child(nextBtn);
-            picker.add_child(navRow);
+            const monthValueLabel = new St.Label({
+                text: monthNames[selMonth],
+                style_class: 'date-spinner-value date-spinner-month',
+                x_align: Clutter.ActorAlign.CENTER,
+                y_align: Clutter.ActorAlign.CENTER,
+            });
 
-            // Day-of-week header
-            const dowRow = new St.BoxLayout({x_expand: true});
-            const dayNames = [
-                NC_('day abbreviation', 'Su'),
-                NC_('day abbreviation', 'Mo'),
-                NC_('day abbreviation', 'Tu'),
-                NC_('day abbreviation', 'We'),
-                NC_('day abbreviation', 'Th'),
-                NC_('day abbreviation', 'Fr'),
-                NC_('day abbreviation', 'Sa'),
-            ];
-            for (const d of dayNames) {
-                dowRow.add_child(new St.Label({
-                    text: d,
-                    x_expand: true,
-                    x_align: Clutter.ActorAlign.CENTER,
-                    style_class: 'quick-add-calendar-dow',
-                }));
-            }
-            picker.add_child(dowRow);
+            const monthDownBtn = new St.Button({
+                style_class: 'date-spinner-arrow',
+                can_focus: true,
+                child: new St.Icon({
+                    icon_name: 'pan-down-symbolic',
+                    icon_size: 16,
+                }),
+            });
 
-            // 6 rows x 7 day buttons
-            const dayButtons = [];
-            for (let w = 0; w < 6; w++) {
-                const weekRow = new St.BoxLayout({x_expand: true});
-                for (let d = 0; d < 7; d++) {
-                    const btn = new St.Button({
-                        x_expand: true,
-                        can_focus: true,
-                        style_class: 'quick-add-calendar-day',
-                    });
-                    btn.connect('clicked',
-                        onDayClicked.bind(this, w * 7 + d));
-                    weekRow.add_child(btn);
-                    dayButtons.push(btn);
-                }
-                picker.add_child(weekRow);
-            }
+            monthSpinner.add_child(monthUpBtn);
+            monthSpinner.add_child(monthValueLabel);
+            monthSpinner.add_child(monthDownBtn);
 
-            // Bottom row: Today / Clear
+            // Year label (between the two spinners)
+            const yearLabel = new St.Label({
+                text: `${selYear}`,
+                style_class: 'date-spinner-year',
+                x_align: Clutter.ActorAlign.CENTER,
+                y_align: Clutter.ActorAlign.CENTER,
+            });
+
+            // Day spinner (vertical: up arrow, value, down arrow)
+            const daySpinner = new St.BoxLayout({
+                orientation: Clutter.Orientation.VERTICAL,
+                x_align: Clutter.ActorAlign.CENTER,
+                style_class: 'date-spinner',
+            });
+
+            const dayUpBtn = new St.Button({
+                style_class: 'date-spinner-arrow',
+                can_focus: true,
+                child: new St.Icon({
+                    icon_name: 'pan-up-symbolic',
+                    icon_size: 16,
+                }),
+            });
+
+            const dayValueLabel = new St.Label({
+                text: `${selDay}`,
+                style_class: 'date-spinner-value date-spinner-day',
+                x_align: Clutter.ActorAlign.CENTER,
+                y_align: Clutter.ActorAlign.CENTER,
+            });
+
+            const dayDownBtn = new St.Button({
+                style_class: 'date-spinner-arrow',
+                can_focus: true,
+                child: new St.Icon({
+                    icon_name: 'pan-down-symbolic',
+                    icon_size: 16,
+                }),
+            });
+
+            daySpinner.add_child(dayUpBtn);
+            daySpinner.add_child(dayValueLabel);
+            daySpinner.add_child(dayDownBtn);
+
+            // Assemble spinner row
+            spinnerRow.add_child(monthSpinner);
+            spinnerRow.add_child(yearLabel);
+            spinnerRow.add_child(daySpinner);
+            picker.add_child(spinnerRow);
+
+            // -- Bottom row: Today / Clear / OK
             const bottomRow = new St.BoxLayout({
                 x_expand: true,
-                style: 'spacing: 8px; margin-top: 4px;',
+                style_class: 'date-spinner-actions',
             });
 
             const todayBtn = new St.Button({
                 label: _('Today'),
-                style_class: 'quick-add-calendar-action button',
+                style_class: 'date-spinner-action-btn button',
                 can_focus: true,
                 x_expand: true,
-            });
-            todayBtn.connect('clicked', () => {
-                const d = new Date();
-                d.setHours(0, 0, 0, 0);
-                applyDate.call(this, d);
             });
 
             const clearBtn = new St.Button({
                 label: _('Clear'),
-                style_class: 'quick-add-calendar-action button',
+                style_class: 'date-spinner-action-btn button',
                 can_focus: true,
                 x_expand: true,
             });
-            clearBtn.connect('clicked', () => {
-                applyDate.call(this, null);
+
+            const okBtn = new St.Button({
+                label: _('OK'),
+                style_class: 'date-spinner-action-btn button',
+                can_focus: true,
+                x_expand: true,
             });
 
             bottomRow.add_child(todayBtn);
             bottomRow.add_child(clearBtn);
+            bottomRow.add_child(okBtn);
             picker.add_child(bottomRow);
 
             // Insert the picker right after the checkbox in the task box
@@ -2629,91 +2684,73 @@ const Docket = GObject.registerClass(
                 taskBox.insert_child_at_index(picker, checkboxIndex + 1);
             }
 
-            // Helper: update the grid display
-            function updateGrid() {
-                const year = viewDate.getFullYear();
-                const month = viewDate.getMonth();
+            // -- Spinner logic --
 
-                const monthNames = [
-                    _('January'), _('February'), _('March'), _('April'),
-                    _('May'), _('June'), _('July'), _('August'),
-                    _('September'), _('October'), _('November'),
-                    _('December'),
-                ];
-                monthLabel.text = `${monthNames[month]} ${year}`;
-
-                const firstDay = new Date(year, month, 1).getDay();
-                const daysInMonth = new Date(year, month + 1, 0).getDate();
-                const daysInPrev = new Date(year, month, 0).getDate();
-
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-
-                for (let i = 0; i < 42; i++) {
-                    const btn = dayButtons[i];
-                    let dayNum, isCurrentMonth;
-
-                    if (i < firstDay) {
-                        dayNum = daysInPrev - firstDay + i + 1;
-                        isCurrentMonth = false;
-                    } else if (i >= firstDay + daysInMonth) {
-                        dayNum = i - firstDay - daysInMonth + 1;
-                        isCurrentMonth = false;
-                    } else {
-                        dayNum = i - firstDay + 1;
-                        isCurrentMonth = true;
-                    }
-
-                    btn.label = `${dayNum}`;
-                    btn.remove_style_pseudo_class('active');
-                    btn.style_class = 'quick-add-calendar-day';
-
-                    if (!isCurrentMonth) {
-                        btn.add_style_class_name(
-                            'quick-add-calendar-day-other');
-                    }
-
-                    if (isCurrentMonth &&
-                        today.getFullYear() === year &&
-                        today.getMonth() === month &&
-                        today.getDate() === dayNum) {
-                        btn.add_style_class_name(
-                            'quick-add-calendar-day-today');
-                    }
-
-                    if (selectedDate && isCurrentMonth &&
-                        selectedDate.getFullYear() === year &&
-                        selectedDate.getMonth() === month &&
-                        selectedDate.getDate() === dayNum) {
-                        btn.add_style_pseudo_class('active');
-                    }
-                }
-            }
-
-            // Helper: handle day click
-            function onDayClicked(index) {
-                const year = viewDate.getFullYear();
-                const month = viewDate.getMonth();
-                const firstDay = new Date(year, month, 1).getDay();
-                const daysInMonth =
-                    new Date(year, month + 1, 0).getDate();
-
-                let date;
-                if (index < firstDay) {
-                    const prevMonth = new Date(year, month, 0);
-                    date = new Date(prevMonth.getFullYear(),
-                        prevMonth.getMonth(),
-                        prevMonth.getDate() - firstDay + index + 1);
-                } else if (index >= firstDay + daysInMonth) {
-                    date = new Date(year, month + 1,
-                        index - firstDay - daysInMonth + 1);
+            // Month up: increment month, wrap Dec->Jan (year++)
+            monthUpBtn.connect('clicked', () => {
+                if (selMonth === 11) {
+                    selMonth = 0;
+                    selYear++;
                 } else {
-                    date = new Date(year, month, index - firstDay + 1);
+                    selMonth++;
                 }
+                clampDay();
+                updateDisplay();
+            });
 
+            // Month down: decrement month, wrap Jan->Dec (year--)
+            monthDownBtn.connect('clicked', () => {
+                if (selMonth === 0) {
+                    selMonth = 11;
+                    selYear--;
+                } else {
+                    selMonth--;
+                }
+                clampDay();
+                updateDisplay();
+            });
+
+            // Day up: increment day, wrap past end-of-month to 1
+            dayUpBtn.connect('clicked', () => {
+                const max = daysInMonth(selMonth, selYear);
+                if (selDay >= max)
+                    selDay = 1;
+                else
+                    selDay++;
+                updateDisplay();
+            });
+
+            // Day down: decrement day, wrap 1 to end-of-month
+            dayDownBtn.connect('clicked', () => {
+                if (selDay <= 1)
+                    selDay = daysInMonth(selMonth, selYear);
+                else
+                    selDay--;
+                updateDisplay();
+            });
+
+            // -- Action buttons --
+
+            // Today: set spinners to today's date
+            todayBtn.connect('clicked', () => {
+                const now = new Date();
+                selMonth = now.getMonth();
+                selDay = now.getDate();
+                selYear = now.getFullYear();
+                updateDisplay();
+            });
+
+            // Clear: remove due date and close picker
+            clearBtn.connect('clicked', () => {
+                applyDate.call(this, null);
+            });
+
+            // OK: apply selected date and close picker
+            okBtn.connect('clicked', () => {
+                const date = new Date(selYear, selMonth, selDay);
                 date.setHours(0, 0, 0, 0);
                 applyDate.call(this, date);
-            }
+            });
 
             // Helper: apply the selected date and close picker
             function applyDate(date) {
@@ -2728,19 +2765,6 @@ const Docket = GObject.registerClass(
                     task._taskList, task.id, date
                 ).catch(e => logError(e));
             }
-
-            // Wire up navigation
-            prevBtn.connect('clicked', () => {
-                viewDate.setMonth(viewDate.getMonth() - 1);
-                updateGrid();
-            });
-            nextBtn.connect('clicked', () => {
-                viewDate.setMonth(viewDate.getMonth() + 1);
-                updateGrid();
-            });
-
-            // Initial render
-            updateGrid();
         }
 
         /**
