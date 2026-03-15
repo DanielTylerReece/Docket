@@ -1791,10 +1791,16 @@ const Docket = GObject.registerClass(
                 );
             }
 
-            // Add delete button as the first child inside the checkbox layout
+            // Align checkbox indicator and label to top for multi-line tasks
+            const boxActor = checkbox.child.get_child_at_index(0);
+            if (boxActor) boxActor.y_align = Clutter.ActorAlign.START;
+            checkbox.getLabelActor().y_align = Clutter.ActorAlign.START;
+
+            // Add action buttons inside the checkbox layout
             const deleteBtn = new St.Button({
                 style_class: 'task-delete-button',
                 can_focus: true,
+                y_align: Clutter.ActorAlign.START,
                 child: new St.Icon({
                     style_class: 'task-delete-icon',
                     icon_name: 'user-trash-symbolic',
@@ -1807,6 +1813,7 @@ const Docket = GObject.registerClass(
             const editBtn = new St.Button({
                 style_class: 'task-edit-button',
                 can_focus: true,
+                y_align: Clutter.ActorAlign.START,
                 child: new St.Icon({
                     style_class: 'task-edit-icon',
                     icon_name: 'document-edit-symbolic',
@@ -1819,6 +1826,7 @@ const Docket = GObject.registerClass(
             const dueDateBtn = new St.Button({
                 style_class: 'task-duedate-button',
                 can_focus: true,
+                y_align: Clutter.ActorAlign.START,
                 child: new St.Icon({
                     style_class: 'task-duedate-icon',
                     icon_name: 'x-office-calendar-symbolic',
