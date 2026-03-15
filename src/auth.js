@@ -49,9 +49,17 @@ export class AuthManager {
                 await this._refreshPromise;
                 return this._accessToken;
             } catch (e) {
-                // Refresh failed — clear tokens, signal re-auth
                 console.error(`[auth] Token refresh failed: ${e.message}`);
-                await this.clearTokens();
+                // Only clear tokens for auth errors (invalid grant/token).
+                // Network errors and transient failures should NOT destroy
+                // stored credentials — the user would have to re-authenticate.
+                const msg = (e.message || '').toLowerCase();
+                if (msg.includes('invalid_grant') ||
+                    msg.includes('invalid_client') ||
+                    msg.includes('interaction_required') ||
+                    msg.includes('auth-required')) {
+                    await this.clearTokens();
+                }
                 throw new Error('auth-required');
             }
         }
@@ -248,9 +256,14 @@ export class AuthManager {
 
     async _refreshAccessToken() {
         if (!this._refreshToken || typeof this._refreshToken !== 'string' || this._refreshToken.length < 10) {
-            console.log('[auth] Invalid refresh token — clearing credentials');
-            await this.clearTokens();
-            throw new Error('auth-required');
+            // Refresh token not loaded — may be a keyring timing issue.
+            // Try loading from keyring one more time before giving up.
+            await this._loadTokens();
+            if (!this._refreshToken || typeof this._refreshToken !== 'string' || this._refreshToken.length < 10) {
+                console.log('[auth] No valid refresh token after retry — clearing credentials');
+                await this.clearTokens();
+                throw new Error('auth-required');
+            }
         }
 
         const params = Soup.form_encode_hash({
