@@ -58,7 +58,7 @@ export class TaskModel {
      *   2 = p3 (yellow)      → 'normal'
      *   1 = p4 (default)     → 'low'
      *
-     * @param {object} item - Todoist task JSON from REST API v2
+     * @param {object} item - Todoist task JSON from REST API v1
      * @param {string} [projectId] - Override project_id (e.g. from list context)
      * @returns {object} Internal task model
      */
@@ -67,17 +67,17 @@ export class TaskModel {
             id: String(item.id),
             listId: projectId || String(item.project_id),
             title: item.content,
-            status: item.is_completed ? 'completed' : 'notStarted',
+            status: (item.checked || item.is_completed) ? 'completed' : 'notStarted',
             importance: item.priority >= 3 ? 'high' : (item.priority === 2 ? 'normal' : 'low'),
             dueDateTime: null,
             completedDateTime: item.completed_at ? new Date(item.completed_at) : null,
-            createdDateTime: item.created_at ? new Date(item.created_at) : null,
+            createdDateTime: (item.added_at || item.created_at) ? new Date(item.added_at || item.created_at) : null,
             lastModifiedDateTime: null,
             body: item.description ? {content: item.description, contentType: 'text'} : null,
             categories: item.labels || [],
             checklistItems: [],  // Todoist uses subtasks instead
             _parentTaskId: item.parent_id ? String(item.parent_id) : null,
-            _order: item.order,
+            _order: item.child_order ?? item.order,
             _isRecurring: item.due?.is_recurring || false,
             _sectionId: item.section_id ? String(item.section_id) : null,
         };

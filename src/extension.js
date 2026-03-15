@@ -1237,6 +1237,8 @@ const Docket = GObject.registerClass(
         _onSyncUpdate() {
             try {
                 if (this._activeTaskList === null) return;
+                // Defer tree rebuild while inline edit is active
+                if (this._editingTask) return;
                 this._resetTaskBox();
                 this._showActiveTaskList(this._activeTaskList);
             } catch (e) {
@@ -2037,6 +2039,10 @@ const Docket = GObject.registerClass(
          * @param {Checkbox} checkbox - Checkbox that got clicked.
          */
         async _taskClicked(checkbox) {
+            // Skip if inline edit is active — the click propagated from
+            // the edit/delete button to the parent CheckBox.
+            if (this._editingTask) return;
+
             try {
                 this._resetTaskBox();
                 const task = checkbox._task;
@@ -2090,6 +2096,9 @@ const Docket = GObject.registerClass(
             const task = checkbox._task;
             const labelActor = checkbox.getLabelActor();
 
+            // Block checkbox toggle and tree rebuilds while editing
+            this._editingTask = true;
+
             // Hide the label, show an entry in its place
             const originalText = task.title;
             labelActor.hide();
@@ -2119,6 +2128,7 @@ const Docket = GObject.registerClass(
             const cleanup = () => {
                 if (cleaned) return;
                 cleaned = true;
+                this._editingTask = false;
                 try {
                     if (entry && !entry.is_finalized?.() && entry.get_parent()) {
                         entry.get_parent().remove_child(entry);
@@ -2306,8 +2316,22 @@ const Docket = GObject.registerClass(
                 this._settingsTodoistAuthId = this._settings.connect(
                     'changed::todoist-auth-event',
                     () => {
+                        const val = this._settings.get_string('todoist-auth-event');
+                        if (!val) return;
+
+                        // Debounce: ignore events within 5 seconds
+                        const now = Date.now();
+                        if (now - (this._lastTodoistAuthEventTime || 0) < 5000)
+                            return;
+                        this._lastTodoistAuthEventTime = now;
+
                         // Todoist token changed in prefs — reload backends
-                        this._reinitBackends();
+                        if (!this._initInProgress) {
+                            this._initInProgress = true;
+                            this._reinitBackends().finally(() => {
+                                this._initInProgress = false;
+                            });
+                        }
                     }
                 );
             }

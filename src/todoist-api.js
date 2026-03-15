@@ -22,13 +22,15 @@ export class TodoistApi {
     async listTaskLists() {
         const res = await this._client.get(`${REST_BASE}/projects`);
         this._checkStatus(res, 200);
-        const projects = Array.isArray(res.body) ? res.body : [];
+        const projects = Array.isArray(res.body)
+            ? res.body
+            : (res.body?.results || []);
         return projects.map(p => ({
             id: String(p.id),
             displayName: p.name,
             isOwner: true,
             isShared: p.is_shared || false,
-            wellknownListName: p.is_inbox_project ? 'defaultList' : 'none',
+            wellknownListName: p.inbox_project ? 'defaultList' : 'none',
         }));
     }
 
@@ -40,7 +42,9 @@ export class TodoistApi {
     async listTasks(listId) {
         const res = await this._client.get(`${REST_BASE}/tasks?project_id=${encodeURIComponent(listId)}`);
         this._checkStatus(res, 200);
-        const items = Array.isArray(res.body) ? res.body : [];
+        const items = Array.isArray(res.body)
+            ? res.body
+            : (res.body?.results || []);
         return items.map(item => TaskModel.fromTodoistJson(item, listId));
     }
 
