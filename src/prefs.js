@@ -1023,6 +1023,14 @@ const SettingsMenuButton = GObject.registerClass(
                 'Todoist is a trademark of Doist Inc. ' +
                 'This extension is not created by, affiliated with, or supported by Doist.';
 
+            this._aboutDialog.add_credit_section(
+                _('Backend Integrations'),
+                [
+                    'Microsoft To Do — Microsoft Graph API',
+                    'Todoist — Todoist REST API (Doist Inc.)',
+                ]
+            );
+
             this._aboutDialog.translator_credits =
                 /* Translators: put down your name/nickname and email (optional)
             according to the format below. This will credit you in the "About"

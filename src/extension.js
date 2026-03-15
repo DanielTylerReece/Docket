@@ -1057,10 +1057,10 @@ const Docket = GObject.registerClass(
 
                 const item = new PopupMenu.PopupMenuItem(name);
 
-                const iconName = this._backendIconName(taskList.backendId);
-                if (iconName) {
+                const gicon = this._backendGIcon(taskList.backendId);
+                if (gicon) {
                     const icon = new St.Icon({
-                        icon_name: iconName,
+                        gicon: gicon,
                         icon_size: 16,
                         style_class: 'popup-menu-icon',
                         y_align: Clutter.ActorAlign.CENTER,
@@ -2798,9 +2798,9 @@ const Docket = GObject.registerClass(
                     if (merge) {
                         this._headerBackendIcon.visible = false;
                     } else {
-                        const hdrIcon = this._backendIconName(taskList.backendId);
-                        if (hdrIcon) {
-                            this._headerBackendIcon.icon_name = hdrIcon;
+                        const hdrGIcon = this._backendGIcon(taskList.backendId);
+                        if (hdrGIcon) {
+                            this._headerBackendIcon.gicon = hdrGIcon;
                             this._headerBackendIcon.visible = true;
                         } else {
                             this._headerBackendIcon.visible = false;
@@ -3222,15 +3222,22 @@ const Docket = GObject.registerClass(
          * @param {boolean} [fullReset] - Reset vertical scrollbar adjustment.
          * @param {boolean} [refocus] - Refocus the specified task checkbox.
          */
-        _backendIconName(backendId) {
+        _backendGIcon(backendId) {
+            let filename;
             switch (backendId) {
             case 'microsoft':
-                return 'weather-few-clouds-symbolic';
+                filename = 'ms-todo.svg';
+                break;
             case 'todoist':
-                return 'task-due-symbolic';
+                filename = 'todoist.svg';
+                break;
             default:
                 return null;
             }
+            const iconFile = Gio.File.new_for_path(
+                `${this._metadata.path}/icons/${filename}`
+            );
+            return new Gio.FileIcon({file: iconFile});
         }
 
         _resetTaskBox(fullReset = false, refocus = false) {
