@@ -37,6 +37,11 @@ export class SyncEngine {
         this._pollSourceId = 0;
         this._destroyed = false;
 
+        // Optimistic update operation queue
+        this._opQueue = [];
+        this._processingQueue = false;
+        this._queueTimerIds = [];
+
         // Signal handlers
         this._signals = {
             'tasks-changed': [],
@@ -44,6 +49,7 @@ export class SyncEngine {
             'auth-required': [],
             'offline': [],
             'online': [],
+            'operation-failed': [],
         };
     }
 
@@ -207,13 +213,43 @@ export class SyncEngine {
         const backend = this._backends.get(backendId);
         if (!backend)
             throw new Error(`Backend '${backendId}' not registered`);
-        const list = await backend.createTaskList(name);
-        this._taskLists.push(list);
-        this._listBackendMap.set(list.id, backendId);
-        this._tasks.set(list.id, []);
+
+        // Optimistic: add a placeholder list immediately
+        const tempId = `_temp_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+        const placeholderList = {id: tempId, displayName: name, _backendId: backendId};
+        this._taskLists.push(placeholderList);
+        this._listBackendMap.set(tempId, backendId);
+        this._tasks.set(tempId, []);
         this._saveCacheToDisk();
         this._emit('lists-changed');
-        return list;
+
+        // Background API call
+        this._enqueueOperation({
+            description: `Create list "${name}"`,
+            execute: async () => {
+                const list = await backend.createTaskList(name);
+                // Replace placeholder with real list
+                const idx = this._taskLists.findIndex(l => l.id === tempId);
+                if (idx >= 0)
+                    this._taskLists[idx] = list;
+                this._listBackendMap.delete(tempId);
+                this._listBackendMap.set(list.id, backendId);
+                const tempTasks = this._tasks.get(tempId) || [];
+                this._tasks.delete(tempId);
+                this._tasks.set(list.id, tempTasks);
+                this._saveCacheToDisk();
+                this._emit('lists-changed');
+            },
+            rollback: () => {
+                this._taskLists = this._taskLists.filter(l => l.id !== tempId);
+                this._tasks.delete(tempId);
+                this._listBackendMap.delete(tempId);
+                this._saveCacheToDisk();
+                this._emit('lists-changed');
+            },
+        });
+
+        return placeholderList;
     }
 
     /**
@@ -224,15 +260,29 @@ export class SyncEngine {
      */
     async renameTaskList(listId, newName) {
         const backend = this._getBackendForList(listId);
-        const updated = await backend.renameTaskList(listId, newName);
-        // Update local cache
+
+        // Save old name for rollback
         const idx = this._taskLists.findIndex(l => l.id === listId);
-        if (idx >= 0) {
+        const oldName = idx >= 0 ? this._taskLists[idx].displayName : newName;
+
+        // Optimistic: update cache immediately
+        if (idx >= 0)
             this._taskLists[idx].displayName = newName;
-        }
         this._saveCacheToDisk();
         this._emit('lists-changed');
-        return updated;
+
+        // Background API call
+        this._enqueueOperation({
+            description: `Rename list to "${newName}"`,
+            execute: () => backend.renameTaskList(listId, newName),
+            rollback: () => {
+                const i = this._taskLists.findIndex(l => l.id === listId);
+                if (i >= 0)
+                    this._taskLists[i].displayName = oldName;
+                this._saveCacheToDisk();
+                this._emit('lists-changed');
+            },
+        });
     }
 
     /**
@@ -241,17 +291,40 @@ export class SyncEngine {
      */
     async deleteTaskList(listId) {
         const backend = this._getBackendForList(listId);
-        await backend.deleteTaskList(listId);
-        // Remove from local cache
+        const backendId = backend.id;
+
+        // Save state for rollback
+        const removedList = this._taskLists.find(l => l.id === listId);
+        const removedTasks = this._tasks.get(listId) || [];
+        const removedDeltaKey = `${backendId}:${listId}`;
+        const removedDeltaToken = this._deltaTokens.get(removedDeltaKey);
+
+        // Optimistic: remove from cache immediately
         this._taskLists = this._taskLists.filter(l => l.id !== listId);
         this._tasks.delete(listId);
         this._listBackendMap.delete(listId);
-        // Clean up delta tokens for this list
-        const backendId = backend.id;
-        this._deltaTokens.delete(`${backendId}:${listId}`);
+        this._deltaTokens.delete(removedDeltaKey);
         this._saveDeltaTokens();
         this._saveCacheToDisk();
         this._emit('lists-changed');
+
+        // Background API call
+        this._enqueueOperation({
+            description: `Delete list "${removedList?.displayName || listId}"`,
+            execute: () => backend.deleteTaskList(listId),
+            rollback: () => {
+                // Restore list, tasks, backend mapping, and delta token
+                if (removedList)
+                    this._taskLists.push(removedList);
+                this._tasks.set(listId, removedTasks);
+                this._listBackendMap.set(listId, backendId);
+                if (removedDeltaToken)
+                    this._deltaTokens.set(removedDeltaKey, removedDeltaToken);
+                this._saveDeltaTokens();
+                this._saveCacheToDisk();
+                this._emit('lists-changed');
+            },
+        });
     }
 
     // ── Task CRUD ────────────────────────────────────────────────────
@@ -265,13 +338,54 @@ export class SyncEngine {
      */
     async createTask(listId, title, opts = {}) {
         const backend = this._getBackendForList(listId);
-        const task = await backend.createTask(listId, title, opts);
+
+        // Optimistic: add a placeholder task immediately
+        const tempId = `_temp_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+        const placeholderTask = {
+            id: tempId,
+            listId,
+            title,
+            status: 'notStarted',
+            importance: opts.importance || 'normal',
+            dueDateTime: opts.dueDateTime || null,
+            checklistItems: [],
+            _isOptimistic: true,
+        };
+        // Attach getter aliases expected by the UI
+        Object.defineProperties(placeholderTask, {
+            '_uid':      { get() { return this.id; } },
+            '_due':      { get() { return this.dueDateTime; } },
+            '_taskList': { get() { return this.listId; } },
+        });
         const tasks = this._tasks.get(listId) || [];
-        tasks.push(task);
+        tasks.push(placeholderTask);
         this._tasks.set(listId, tasks);
         this._saveCacheToDisk();
         this._emit('tasks-changed');
-        return task;
+
+        // Background API call
+        this._enqueueOperation({
+            description: `Create task "${title}"`,
+            execute: async () => {
+                const realTask = await backend.createTask(listId, title, opts);
+                // Replace placeholder with real task
+                const current = this._tasks.get(listId) || [];
+                const idx = current.findIndex(t => t.id === tempId);
+                if (idx >= 0)
+                    current[idx] = realTask;
+                this._tasks.set(listId, current);
+                this._saveCacheToDisk();
+                this._emit('tasks-changed');
+            },
+            rollback: () => {
+                const current = this._tasks.get(listId) || [];
+                this._tasks.set(listId, current.filter(t => t.id !== tempId));
+                this._saveCacheToDisk();
+                this._emit('tasks-changed');
+            },
+        });
+
+        return placeholderTask;
     }
 
     /**
@@ -279,11 +393,35 @@ export class SyncEngine {
      */
     async completeTask(listId, taskId) {
         const backend = this._getBackendForList(listId);
-        const updated = await backend.completeTask(listId, taskId);
-        this._updateTaskInCache(listId, updated);
+
+        // Save old status for rollback
+        const tasks = this._tasks.get(listId) || [];
+        const task = tasks.find(t => t.id === taskId);
+        const oldStatus = task ? task.status : 'notStarted';
+        const taskTitle = task ? task.title : taskId;
+
+        // Optimistic: mark completed immediately
+        if (task) task.status = 'completed';
         this._saveCacheToDisk();
         this._emit('tasks-changed');
-        return updated;
+
+        // Background API call
+        this._enqueueOperation({
+            description: `Complete task "${taskTitle}"`,
+            execute: async () => {
+                const updated = await backend.completeTask(listId, taskId);
+                this._updateTaskInCache(listId, updated);
+                this._saveCacheToDisk();
+                // No emit needed — cache already shows completed state
+            },
+            rollback: () => {
+                const current = this._tasks.get(listId) || [];
+                const t = current.find(t => t.id === taskId);
+                if (t) t.status = oldStatus;
+                this._saveCacheToDisk();
+                this._emit('tasks-changed');
+            },
+        });
     }
 
     /**
@@ -291,11 +429,34 @@ export class SyncEngine {
      */
     async uncompleteTask(listId, taskId) {
         const backend = this._getBackendForList(listId);
-        const updated = await backend.uncompleteTask(listId, taskId);
-        this._updateTaskInCache(listId, updated);
+
+        // Save old status for rollback
+        const tasks = this._tasks.get(listId) || [];
+        const task = tasks.find(t => t.id === taskId);
+        const oldStatus = task ? task.status : 'completed';
+        const taskTitle = task ? task.title : taskId;
+
+        // Optimistic: mark not started immediately
+        if (task) task.status = 'notStarted';
         this._saveCacheToDisk();
         this._emit('tasks-changed');
-        return updated;
+
+        // Background API call
+        this._enqueueOperation({
+            description: `Uncomplete task "${taskTitle}"`,
+            execute: async () => {
+                const updated = await backend.uncompleteTask(listId, taskId);
+                this._updateTaskInCache(listId, updated);
+                this._saveCacheToDisk();
+            },
+            rollback: () => {
+                const current = this._tasks.get(listId) || [];
+                const t = current.find(t => t.id === taskId);
+                if (t) t.status = oldStatus;
+                this._saveCacheToDisk();
+                this._emit('tasks-changed');
+            },
+        });
     }
 
     /**
@@ -306,13 +467,29 @@ export class SyncEngine {
      */
     async updateTaskTitle(listId, taskId, newTitle) {
         const backend = this._getBackendForList(listId);
-        await backend.updateTaskTitle(listId, taskId, newTitle);
-        // Update local cache optimistically
+
+        // Save old title for rollback
         const tasks = this._tasks.get(listId) || [];
         const task = tasks.find(t => t.id === taskId);
+        const oldTitle = task ? task.title : newTitle;
+
+        // Optimistic: update cache immediately
         if (task) task.title = newTitle;
         this._saveCacheToDisk();
         this._emit('tasks-changed');
+
+        // Background API call
+        this._enqueueOperation({
+            description: `Rename task to "${newTitle}"`,
+            execute: () => backend.updateTaskTitle(listId, taskId, newTitle),
+            rollback: () => {
+                const current = this._tasks.get(listId) || [];
+                const t = current.find(t => t.id === taskId);
+                if (t) t.title = oldTitle;
+                this._saveCacheToDisk();
+                this._emit('tasks-changed');
+            },
+        });
     }
 
     /**
@@ -323,13 +500,30 @@ export class SyncEngine {
      */
     async updateTaskDueDate(listId, taskId, dueDate) {
         const backend = this._getBackendForList(listId);
-        await backend.updateTaskDueDate(listId, taskId, dueDate);
-        // Update local cache optimistically
+
+        // Save old due date for rollback
         const tasks = this._tasks.get(listId) || [];
         const task = tasks.find(t => t.id === taskId);
+        const oldDueDate = task ? task.dueDateTime : null;
+        const taskTitle = task ? task.title : taskId;
+
+        // Optimistic: update cache immediately
         if (task) task.dueDateTime = dueDate;
         this._saveCacheToDisk();
         this._emit('tasks-changed');
+
+        // Background API call
+        this._enqueueOperation({
+            description: `Update due date for "${taskTitle}"`,
+            execute: () => backend.updateTaskDueDate(listId, taskId, dueDate),
+            rollback: () => {
+                const current = this._tasks.get(listId) || [];
+                const t = current.find(t => t.id === taskId);
+                if (t) t.dueDateTime = oldDueDate;
+                this._saveCacheToDisk();
+                this._emit('tasks-changed');
+            },
+        });
     }
 
     /**
@@ -337,11 +531,30 @@ export class SyncEngine {
      */
     async deleteTask(listId, taskId) {
         const backend = this._getBackendForList(listId);
-        await backend.deleteTask(listId, taskId);
+
+        // Save removed task for rollback
         const tasks = this._tasks.get(listId) || [];
+        const removedTask = tasks.find(t => t.id === taskId);
+
+        // Optimistic: remove from cache immediately
         this._tasks.set(listId, tasks.filter(t => t.id !== taskId));
         this._saveCacheToDisk();
         this._emit('tasks-changed');
+
+        // Background API call
+        this._enqueueOperation({
+            description: `Delete task "${removedTask?.title || taskId}"`,
+            execute: () => backend.deleteTask(listId, taskId),
+            rollback: () => {
+                if (removedTask) {
+                    const current = this._tasks.get(listId) || [];
+                    current.push(removedTask);
+                    this._tasks.set(listId, current);
+                    this._saveCacheToDisk();
+                    this._emit('tasks-changed');
+                }
+            },
+        });
     }
 
     /**
@@ -353,9 +566,43 @@ export class SyncEngine {
      */
     async createSubtask(listId, taskId, title) {
         const backend = this._getBackendForList(listId);
-        await backend.createSubtask(listId, taskId, title);
-        // Full sync to pick up the new subtask in the task tree
-        await this.fullSync();
+
+        // Optimistic: add placeholder checklist item immediately
+        const tempId = `_temp_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+        const tasks = this._tasks.get(listId) || [];
+        const parentTask = tasks.find(t => t.id === taskId);
+        if (parentTask) {
+            if (!parentTask.checklistItems) parentTask.checklistItems = [];
+            parentTask.checklistItems.push({
+                id: tempId,
+                displayName: title,
+                isChecked: false,
+                checkedDateTime: null,
+            });
+        }
+        this._saveCacheToDisk();
+        this._emit('tasks-changed');
+
+        // Background API call + full sync to get real IDs
+        this._enqueueOperation({
+            description: `Create subtask "${title}"`,
+            execute: async () => {
+                await backend.createSubtask(listId, taskId, title);
+                // Full sync replaces cache with real data
+                await this.fullSync();
+            },
+            rollback: () => {
+                const current = this._tasks.get(listId) || [];
+                const parent = current.find(t => t.id === taskId);
+                if (parent && parent.checklistItems) {
+                    parent.checklistItems = parent.checklistItems.filter(
+                        ci => ci.id !== tempId
+                    );
+                }
+                this._saveCacheToDisk();
+                this._emit('tasks-changed');
+            },
+        });
     }
 
     /**
@@ -370,15 +617,44 @@ export class SyncEngine {
         const item = task.checklistItems?.find(ci => ci.id === itemId);
         if (!item) return;
 
-        const updated = await backend.toggleChecklistItem(listId, taskId, itemId, {isChecked: !item.isChecked});
+        // Save old state for rollback
+        const oldIsChecked = item.isChecked;
+        const oldCheckedDateTime = item.checkedDateTime;
+        const newIsChecked = !item.isChecked;
+        const itemName = item.displayName || itemId;
 
-        // Update local cache
-        item.isChecked = updated.isChecked;
-        item.checkedDateTime = updated.checkedDateTime
-            ? new Date(updated.checkedDateTime)
-            : null;
+        // Optimistic: toggle immediately
+        item.isChecked = newIsChecked;
+        item.checkedDateTime = newIsChecked ? new Date() : null;
         this._saveCacheToDisk();
         this._emit('tasks-changed');
+
+        // Background API call
+        this._enqueueOperation({
+            description: `Toggle subtask "${itemName}"`,
+            execute: async () => {
+                const updated = await backend.toggleChecklistItem(
+                    listId, taskId, itemId, {isChecked: newIsChecked}
+                );
+                // Update with server-authoritative values
+                item.isChecked = updated.isChecked;
+                item.checkedDateTime = updated.checkedDateTime
+                    ? new Date(updated.checkedDateTime)
+                    : null;
+                this._saveCacheToDisk();
+            },
+            rollback: () => {
+                const current = this._tasks.get(listId) || [];
+                const t = current.find(t => t.id === taskId);
+                const ci = t?.checklistItems?.find(ci => ci.id === itemId);
+                if (ci) {
+                    ci.isChecked = oldIsChecked;
+                    ci.checkedDateTime = oldCheckedDateTime;
+                }
+                this._saveCacheToDisk();
+                this._emit('tasks-changed');
+            },
+        });
     }
 
     // ── Polling ─────────────────────────────────────────────────────
@@ -414,7 +690,7 @@ export class SyncEngine {
 
     /**
      * Connect to a signal.
-     * @param {string} signal - 'tasks-changed'|'lists-changed'|'auth-required'|'offline'|'online'
+     * @param {string} signal - 'tasks-changed'|'lists-changed'|'auth-required'|'offline'|'online'|'operation-failed'
      * @param {Function} callback
      */
     connect(signal, callback) {
@@ -430,10 +706,98 @@ export class SyncEngine {
     destroy() {
         this._destroyed = true;
         this.stopPolling();
+
+        // Cancel any pending retry timers in the operation queue
+        for (const timerId of this._queueTimerIds) {
+            GLib.source_remove(timerId);
+        }
+        this._queueTimerIds = [];
+        this._opQueue = [];
+        this._processingQueue = false;
+
         this._tasks.clear();
         this._taskLists = [];
         this._deltaTokens.clear();
         this._listBackendMap.clear();
+    }
+
+    // ── Private: Optimistic Operation Queue ────────────────────────
+
+    /**
+     * GJS-compatible async delay using GLib.timeout_add.
+     * @param {number} ms - Milliseconds to wait
+     * @returns {Promise<void>}
+     */
+    _delay(ms) {
+        return new Promise(resolve => {
+            const id = GLib.timeout_add(GLib.PRIORITY_DEFAULT, ms, () => {
+                this._queueTimerIds = this._queueTimerIds.filter(t => t !== id);
+                resolve();
+                return GLib.SOURCE_REMOVE;
+            });
+            this._queueTimerIds.push(id);
+        });
+    }
+
+    /**
+     * Enqueue a background API operation with retry and rollback support.
+     * Operations are processed sequentially to avoid race conditions.
+     *
+     * @param {object} opts
+     * @param {string} opts.description - Human-readable description for failure dialog
+     * @param {Function} opts.execute - Async function that performs the API call
+     * @param {Function} opts.rollback - Function to revert the optimistic cache update
+     * @param {number} [opts.retries=3] - Max retry attempts
+     * @param {number} [opts.baseDelay=1000] - Base delay in ms for exponential backoff
+     */
+    _enqueueOperation({description, execute, rollback, retries = 3, baseDelay = 1000}) {
+        this._opQueue.push({description, execute, rollback, retries, baseDelay, attempt: 0});
+        this._processQueue();
+    }
+
+    /**
+     * Process the operation queue sequentially.
+     * Each operation is retried with exponential backoff on failure.
+     * On final failure, the optimistic update is rolled back and
+     * an 'operation-failed' signal is emitted for UI notification.
+     */
+    async _processQueue() {
+        if (this._processingQueue) return;
+        this._processingQueue = true;
+
+        while (this._opQueue.length > 0) {
+            if (this._destroyed) break;
+
+            const op = this._opQueue[0];
+            try {
+                await op.execute();
+                this._opQueue.shift(); // success — remove from queue
+            } catch (e) {
+                op.attempt++;
+                console.warn(
+                    `[sync-engine] Operation failed (attempt ${op.attempt}/${op.retries}): ` +
+                    `${op.description} — ${e.message}`
+                );
+
+                if (op.attempt >= op.retries) {
+                    this._opQueue.shift();
+                    // Roll back the optimistic cache update
+                    try {
+                        op.rollback();
+                    } catch (re) {
+                        console.error(`[sync-engine] Rollback error: ${re.message}`);
+                    }
+                    // Notify UI of the failure
+                    this._emit('operation-failed', op.description);
+                } else {
+                    // Exponential backoff: 1s, 2s, 4s, ...
+                    const delay = op.baseDelay * Math.pow(2, op.attempt - 1);
+                    await this._delay(delay);
+                }
+            }
+        }
+
+        this._processingQueue = false;
     }
 
     // ── Private: Backend Routing ────────────────────────────────────
@@ -717,11 +1081,11 @@ export class SyncEngine {
 
     // ── Private: Signal Emission ────────────────────────────────────
 
-    _emit(signal) {
+    _emit(signal, ...args) {
         if (this._signals[signal]) {
             for (const cb of this._signals[signal]) {
                 try {
-                    cb();
+                    cb(...args);
                 } catch (e) {
                     console.error(`[sync-engine] signal '${signal}' handler error: ${e.message}`);
                 }

@@ -306,6 +306,10 @@ const Docket = GObject.registerClass(
                     this._offlineBanner.visible = false;
             });
 
+            this._syncEngine.connect('operation-failed', (description) => {
+                this._showOperationFailedDialog(description);
+            });
+
             try {
                 await this._syncEngine.initialize();
             } catch (e) {
@@ -1368,6 +1372,48 @@ const Docket = GObject.registerClass(
                             .catch(e => logError(e));
                     }
                 },
+            });
+
+            dialog.open(global.get_current_time());
+        }
+
+        /**
+         * Shows a modal dialog informing the user that a background operation
+         * failed after exhausting all retry attempts. The optimistic UI change
+         * has already been rolled back by the time this is called.
+         *
+         * @param {string} description - Human-readable description of what failed
+         */
+        _showOperationFailedDialog(description) {
+            const dialog = new ModalDialog.ModalDialog({
+                styleClass: 'docket-operation-failed-dialog',
+            });
+
+            const contentBox = new St.BoxLayout({
+                orientation: Clutter.Orientation.VERTICAL,
+                style: 'spacing: 12px; padding: 12px;',
+            });
+
+            const titleLabel = new St.Label({
+                text: _('Operation Failed'),
+                style: 'font-weight: bold; font-size: 1.1em;',
+            });
+            contentBox.add_child(titleLabel);
+
+            const detailLabel = new St.Label({
+                text: _('%s\n\nThe change has been reverted.').format(description),
+                style: 'color: rgba(255, 255, 255, 0.7);',
+            });
+            detailLabel.clutter_text.line_wrap = true;
+            contentBox.add_child(detailLabel);
+
+            dialog.contentLayout.add_child(contentBox);
+
+            dialog.addButton({
+                label: _('OK'),
+                action: () => dialog.close(global.get_current_time()),
+                key: Clutter.KEY_Escape,
+                default: true,
             });
 
             dialog.open(global.get_current_time());
