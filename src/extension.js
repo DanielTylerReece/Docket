@@ -212,8 +212,8 @@ const Docket = GObject.registerClass(
                 }
 
                 // If keyring failures left pending backends, schedule retry
-                if (this._pendingBackends.length > 0 && this._backends.size === 0) {
-                    console.log('[docket] No backends loaded, scheduling retry...');
+                if (this._pendingBackends.length > 0) {
+                    console.log(`[docket] ${this._pendingBackends.length} backend(s) pending, scheduling retry...`);
                     this._tokenRetryCount = 0;
                     this._tokenRetryId = GLib.timeout_add_seconds(
                         GLib.PRIORITY_DEFAULT, 2, () => {
@@ -222,19 +222,22 @@ const Docket = GObject.registerClass(
                             this._retryPendingBackends().then(anyLoaded => {
                                 if (this._destroyed) return;
                                 if (anyLoaded) {
-                                    console.log('[docket] Backends loaded on retry');
-                                    this._tokenRetryId = 0;
-                                    this._initAfterTokens(themeContext).catch(
+                                    console.log('[docket] Pending backends loaded on retry');
+                                    this._reinitBackends().catch(
                                         err => logError(err)
                                     );
                                 }
                             }).catch(retryErr => {
                                 console.log(`[docket] Token retry ${this._tokenRetryCount}/5 failed: ${retryErr.message}`);
                             });
-                            if (this._tokenRetryCount >= 5) {
-                                console.log('[docket] All token retries exhausted');
+                            if (this._tokenRetryCount >= 5 ||
+                                !this._pendingBackends?.length) {
                                 this._tokenRetryId = 0;
-                                if (!this._destroyed) {
+                                if (!this._pendingBackends?.length)
+                                    console.log('[docket] All pending backends loaded');
+                                else
+                                    console.log('[docket] Token retries exhausted, some backends unavailable');
+                                if (!this._destroyed && this._backends.size === 0) {
                                     this._showPlaceholderWithStatus('missing-dependencies');
                                     this._watchForAuth();
                                 }
@@ -243,7 +246,10 @@ const Docket = GObject.registerClass(
                             return GLib.SOURCE_CONTINUE;
                         }
                     );
-                    return; // Don't continue — retry will handle init
+
+                    // If some backends DID load, init with what we have
+                    if (this._backends.size === 0)
+                        return; // Nothing loaded yet — retry will handle init
                 }
 
                 await this._initAfterTokens(themeContext);
