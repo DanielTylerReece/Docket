@@ -269,6 +269,8 @@ const Docket = GObject.registerClass(
                 this._onSyncUpdate();
             });
             this._syncEngine.connect('lists-changed', () => {
+                // Defer tree rebuild while inline edit is active
+                if (this._editingTask) return;
                 const activeUid = this._taskLists[this._activeTaskList]
                     ? this._taskLists[this._activeTaskList].uid
                     : null;
@@ -2446,6 +2448,10 @@ const Docket = GObject.registerClass(
                 } catch (e) {
                     // Widget already destroyed by tree rebuild — ignore
                 }
+                // Flush any deferred tree rebuilds that were suppressed
+                // while inline edit was active (e.g. lists-changed,
+                // settings-changed, periodic refresh).
+                this._onSyncUpdate();
             };
 
             // Enter = save — cleanup synchronously, then fire-and-forget
@@ -3353,7 +3359,7 @@ const Docket = GObject.registerClass(
                         GLib.PRIORITY_DEFAULT,
                         2,
                         () => {
-                            if (!this._idleAddId)
+                            if (!this._idleAddId && !this._editingTask)
                                 this._showActiveTaskList(this._activeTaskList);
 
                             if (i++ < 60 && this._activeTaskList !== null)
@@ -3412,6 +3418,8 @@ const Docket = GObject.registerClass(
                 const silentKeys = ['last-active'];
 
                 if (silentKeys.includes(key)) return;
+                // Defer tree rebuild while inline edit is active
+                if (this._editingTask) return;
 
                 const active = this._taskLists[this._activeTaskList]
                     ? this._taskLists[this._activeTaskList].uid
