@@ -269,8 +269,16 @@ const Docket = GObject.registerClass(
                 this._onSyncUpdate();
             });
             this._syncEngine.connect('lists-changed', () => {
+                const activeUid = this._taskLists[this._activeTaskList]
+                    ? this._taskLists[this._activeTaskList].uid
+                    : null;
                 this._storeTaskLists();
-                this._showActiveTaskList(this._activeTaskList || 0);
+                if (activeUid) {
+                    const newIndex = this._taskLists.findIndex(l => l.uid === activeUid);
+                    this._showActiveTaskList(newIndex !== -1 ? newIndex : 0);
+                } else {
+                    this._showActiveTaskList(this._activeTaskList ?? 0);
+                }
             });
             this._syncEngine.connect('auth-required', () => {
                 // Only show auth prompt if NO backends are authenticated
