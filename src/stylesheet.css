@@ -171,6 +171,24 @@
     background-color: transparent !important;
 }
 
+.docket-column .task-duedate-button {
+    padding: 2px;
+    background-color: transparent;
+}
+
+/* Override .check-box StIcon theme that makes icons transparent */
+.docket-column .task-duedate-icon {
+    color: inherit !important;
+    border: none !important;
+    border-radius: 0 !important;
+    background-color: transparent !important;
+}
+
+/* Inline calendar on task rows */
+.docket-column .task-duedate-calendar {
+    margin: 2px 0 4px 24px;
+}
+
 /* List management — edit button in dropdown */
 .list-edit-button {
     padding: 2px 4px;

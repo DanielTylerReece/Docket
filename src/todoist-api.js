@@ -129,6 +129,19 @@ export class TodoistApi {
     async updateTask(listId, taskId, patch) {
         const encodedId = encodeURIComponent(taskId);
 
+        // Handle due date update
+        if ('dueDate' in patch) {
+            const body = patch.dueDate
+                ? {due_date: patch.dueDate.toISOString().split('T')[0]}
+                : {due_string: 'no date'};
+            const res = await this._client.post(`${REST_BASE}/tasks/${encodedId}`, body);
+            this._checkStatus(res, 200);
+
+            // If no other changes, return immediately
+            if (patch.title === undefined && patch.status === undefined)
+                return TaskModel.fromTodoistJson(res.body, listId);
+        }
+
         // Handle title update
         if (patch.title !== undefined) {
             const res = await this._client.post(`${REST_BASE}/tasks/${encodedId}`, {content: patch.title});

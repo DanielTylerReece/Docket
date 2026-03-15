@@ -1798,6 +1798,19 @@ const Docket = GObject.registerClass(
             editBtn.connect('clicked', () => this._onEditTask(checkbox));
             checkbox.child.insert_child_at_index(editBtn, 1);
 
+            const dueDateBtn = new St.Button({
+                style_class: 'task-duedate-button',
+                can_focus: true,
+                child: new St.Icon({
+                    style_class: 'task-duedate-icon',
+                    icon_name: 'x-office-calendar-symbolic',
+                    icon_size: 14,
+                }),
+            });
+            dueDateBtn.connect('clicked', () =>
+                this._onDueDateTask(checkbox));
+            checkbox.child.insert_child_at_index(dueDateBtn, 2);
+
             return checkbox;
         }
 
@@ -1819,7 +1832,7 @@ const Docket = GObject.registerClass(
                 accessible_role: Atk.Role.ARROW
             });
 
-            checkbox.child.insert_child_at_index(indicator, 3);
+            checkbox.child.insert_child_at_index(indicator, 4);
             return checkbox;
         }
 
@@ -1959,7 +1972,7 @@ const Docket = GObject.registerClass(
                 orientation: Clutter.Orientation.VERTICAL
             });
 
-            const subTaskSummary = checkbox.child.get_child_at_index(4);
+            const subTaskSummary = checkbox.child.get_child_at_index(5);
             checkbox.child.remove_child(subTaskSummary);
             box.add_child(this._buildDueDateLabel(due));
 
@@ -1967,7 +1980,7 @@ const Docket = GObject.registerClass(
                 subTaskSummary.set_x_align(Clutter.ActorAlign.START);
 
             box.add_child(subTaskSummary);
-            checkbox.child.insert_child_at_index(box, 4);
+            checkbox.child.insert_child_at_index(box, 5);
             return checkbox;
         }
 
@@ -2452,6 +2465,260 @@ const Docket = GObject.registerClass(
             // replacement (tasks-changed → _idleAddHelper) causes the
             // Clutter unmap assertion crash.  Only explicit user actions
             // (Enter / Escape) trigger cleanup.
+        }
+
+        /**
+         * Handles due date editing for a task via an inline calendar picker.
+         * @param {CheckBox.CheckBox} checkbox - The checkbox whose task to edit.
+         */
+        _onDueDateTask(checkbox) {
+            const task = checkbox._task;
+
+            // Close any existing task due-date picker
+            if (this._activeDueDatePicker) {
+                try {
+                    const prev = this._activeDueDatePicker;
+                    if (prev.get_parent())
+                        prev.get_parent().remove_child(prev);
+                    prev.destroy();
+                } catch (e) {
+                    // Already destroyed — ignore
+                }
+                this._activeDueDatePicker = null;
+            }
+
+            let viewDate = task.dueDateTime
+                ? new Date(task.dueDateTime)
+                : new Date();
+            let selectedDate = task.dueDateTime
+                ? new Date(task.dueDateTime)
+                : null;
+
+            // Build the inline calendar picker
+            const picker = new St.BoxLayout({
+                orientation: Clutter.Orientation.VERTICAL,
+                style_class: 'quick-add-calendar task-duedate-calendar',
+            });
+            this._activeDueDatePicker = picker;
+
+            // Navigation: < Month Year >
+            const navRow = new St.BoxLayout({x_expand: true});
+
+            const prevBtn = new St.Button({
+                style_class: 'calendar-change-month-back pager-button',
+                can_focus: true,
+                child: new St.Icon({icon_name: 'pan-start-symbolic'}),
+            });
+
+            const monthLabel = new St.Label({
+                x_expand: true,
+                x_align: Clutter.ActorAlign.CENTER,
+                y_align: Clutter.ActorAlign.CENTER,
+                style: 'font-weight: bold;',
+            });
+
+            const nextBtn = new St.Button({
+                style_class: 'calendar-change-month-forward pager-button',
+                can_focus: true,
+                child: new St.Icon({icon_name: 'pan-end-symbolic'}),
+            });
+
+            navRow.add_child(prevBtn);
+            navRow.add_child(monthLabel);
+            navRow.add_child(nextBtn);
+            picker.add_child(navRow);
+
+            // Day-of-week header
+            const dowRow = new St.BoxLayout({x_expand: true});
+            const dayNames = [
+                NC_('day abbreviation', 'Su'),
+                NC_('day abbreviation', 'Mo'),
+                NC_('day abbreviation', 'Tu'),
+                NC_('day abbreviation', 'We'),
+                NC_('day abbreviation', 'Th'),
+                NC_('day abbreviation', 'Fr'),
+                NC_('day abbreviation', 'Sa'),
+            ];
+            for (const d of dayNames) {
+                dowRow.add_child(new St.Label({
+                    text: d,
+                    x_expand: true,
+                    x_align: Clutter.ActorAlign.CENTER,
+                    style_class: 'quick-add-calendar-dow',
+                }));
+            }
+            picker.add_child(dowRow);
+
+            // 6 rows x 7 day buttons
+            const dayButtons = [];
+            for (let w = 0; w < 6; w++) {
+                const weekRow = new St.BoxLayout({x_expand: true});
+                for (let d = 0; d < 7; d++) {
+                    const btn = new St.Button({
+                        x_expand: true,
+                        can_focus: true,
+                        style_class: 'quick-add-calendar-day',
+                    });
+                    btn.connect('clicked',
+                        onDayClicked.bind(this, w * 7 + d));
+                    weekRow.add_child(btn);
+                    dayButtons.push(btn);
+                }
+                picker.add_child(weekRow);
+            }
+
+            // Bottom row: Today / Clear
+            const bottomRow = new St.BoxLayout({
+                x_expand: true,
+                style: 'spacing: 8px; margin-top: 4px;',
+            });
+
+            const todayBtn = new St.Button({
+                label: _('Today'),
+                style_class: 'quick-add-calendar-action button',
+                can_focus: true,
+                x_expand: true,
+            });
+            todayBtn.connect('clicked', () => {
+                const d = new Date();
+                d.setHours(0, 0, 0, 0);
+                applyDate.call(this, d);
+            });
+
+            const clearBtn = new St.Button({
+                label: _('Clear'),
+                style_class: 'quick-add-calendar-action button',
+                can_focus: true,
+                x_expand: true,
+            });
+            clearBtn.connect('clicked', () => {
+                applyDate.call(this, null);
+            });
+
+            bottomRow.add_child(todayBtn);
+            bottomRow.add_child(clearBtn);
+            picker.add_child(bottomRow);
+
+            // Insert the picker right after the checkbox in the task box
+            const taskBox = checkbox.get_parent();
+            if (taskBox) {
+                const children = taskBox.get_children();
+                const checkboxIndex = children.indexOf(checkbox);
+                taskBox.insert_child_at_index(picker, checkboxIndex + 1);
+            }
+
+            // Helper: update the grid display
+            function updateGrid() {
+                const year = viewDate.getFullYear();
+                const month = viewDate.getMonth();
+
+                const monthNames = [
+                    _('January'), _('February'), _('March'), _('April'),
+                    _('May'), _('June'), _('July'), _('August'),
+                    _('September'), _('October'), _('November'),
+                    _('December'),
+                ];
+                monthLabel.text = `${monthNames[month]} ${year}`;
+
+                const firstDay = new Date(year, month, 1).getDay();
+                const daysInMonth = new Date(year, month + 1, 0).getDate();
+                const daysInPrev = new Date(year, month, 0).getDate();
+
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+
+                for (let i = 0; i < 42; i++) {
+                    const btn = dayButtons[i];
+                    let dayNum, isCurrentMonth;
+
+                    if (i < firstDay) {
+                        dayNum = daysInPrev - firstDay + i + 1;
+                        isCurrentMonth = false;
+                    } else if (i >= firstDay + daysInMonth) {
+                        dayNum = i - firstDay - daysInMonth + 1;
+                        isCurrentMonth = false;
+                    } else {
+                        dayNum = i - firstDay + 1;
+                        isCurrentMonth = true;
+                    }
+
+                    btn.label = `${dayNum}`;
+                    btn.remove_style_pseudo_class('active');
+                    btn.style_class = 'quick-add-calendar-day';
+
+                    if (!isCurrentMonth) {
+                        btn.add_style_class_name(
+                            'quick-add-calendar-day-other');
+                    }
+
+                    if (isCurrentMonth &&
+                        today.getFullYear() === year &&
+                        today.getMonth() === month &&
+                        today.getDate() === dayNum) {
+                        btn.add_style_class_name(
+                            'quick-add-calendar-day-today');
+                    }
+
+                    if (selectedDate && isCurrentMonth &&
+                        selectedDate.getFullYear() === year &&
+                        selectedDate.getMonth() === month &&
+                        selectedDate.getDate() === dayNum) {
+                        btn.add_style_pseudo_class('active');
+                    }
+                }
+            }
+
+            // Helper: handle day click
+            function onDayClicked(index) {
+                const year = viewDate.getFullYear();
+                const month = viewDate.getMonth();
+                const firstDay = new Date(year, month, 1).getDay();
+                const daysInMonth =
+                    new Date(year, month + 1, 0).getDate();
+
+                let date;
+                if (index < firstDay) {
+                    const prevMonth = new Date(year, month, 0);
+                    date = new Date(prevMonth.getFullYear(),
+                        prevMonth.getMonth(),
+                        prevMonth.getDate() - firstDay + index + 1);
+                } else if (index >= firstDay + daysInMonth) {
+                    date = new Date(year, month + 1,
+                        index - firstDay - daysInMonth + 1);
+                } else {
+                    date = new Date(year, month, index - firstDay + 1);
+                }
+
+                date.setHours(0, 0, 0, 0);
+                applyDate.call(this, date);
+            }
+
+            // Helper: apply the selected date and close picker
+            function applyDate(date) {
+                // Remove picker
+                if (picker.get_parent())
+                    picker.get_parent().remove_child(picker);
+                picker.destroy();
+                this._activeDueDatePicker = null;
+
+                // Update via sync engine
+                this._syncEngine.updateTaskDueDate(
+                    task._taskList, task.id, date
+                ).catch(e => logError(e));
+            }
+
+            // Wire up navigation
+            prevBtn.connect('clicked', () => {
+                viewDate.setMonth(viewDate.getMonth() - 1);
+                updateGrid();
+            });
+            nextBtn.connect('clicked', () => {
+                viewDate.setMonth(viewDate.getMonth() + 1);
+                updateGrid();
+            });
+
+            // Initial render
+            updateGrid();
         }
 
         /**

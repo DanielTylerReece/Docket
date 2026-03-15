@@ -181,6 +181,17 @@ export class BackendAdapter {
         throw new Error('not implemented');
     }
 
+    /**
+     * Update a task's due date.
+     * @param {string} listId
+     * @param {string} taskId
+     * @param {Date|null} dueDate - New due date, or null to clear
+     * @returns {Promise<object>} Updated task (internal model)
+     */
+    async updateTaskDueDate(listId, taskId, dueDate) {
+        throw new Error('not implemented');
+    }
+
     // ── Checklist / Subtask ──────────────────────────────────────────
 
     /**

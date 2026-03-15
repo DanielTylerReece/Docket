@@ -231,6 +231,20 @@ export class GraphBackend extends BackendAdapter {
         return this._api.updateTask(listId, taskId, {title: newTitle});
     }
 
+    /**
+     * Update a task's due date.
+     * Uses TaskModel.toUpdatePayload to build the Graph patch.
+     * @param {string} listId
+     * @param {string} taskId
+     * @param {Date|null} dueDate - New due date, or null to clear
+     * @returns {Promise<object>} Updated task (internal model)
+     */
+    async updateTaskDueDate(listId, taskId, dueDate) {
+        this._ensureApi();
+        const patch = TaskModel.toUpdatePayload({dueDateTime: dueDate});
+        return this._api.updateTask(listId, taskId, patch);
+    }
+
     // ── Checklist / Subtask ──────────────────────────────────────────
 
     /**

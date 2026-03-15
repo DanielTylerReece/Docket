@@ -316,6 +316,23 @@ export class SyncEngine {
     }
 
     /**
+     * Update a task's due date.
+     * @param {string} listId
+     * @param {string} taskId
+     * @param {Date|null} dueDate - New due date, or null to clear
+     */
+    async updateTaskDueDate(listId, taskId, dueDate) {
+        const backend = this._getBackendForList(listId);
+        await backend.updateTaskDueDate(listId, taskId, dueDate);
+        // Update local cache optimistically
+        const tasks = this._tasks.get(listId) || [];
+        const task = tasks.find(t => t.id === taskId);
+        if (task) task.dueDateTime = dueDate;
+        this._saveCacheToDisk();
+        this._emit('tasks-changed');
+    }
+
+    /**
      * Delete a task.
      */
     async deleteTask(listId, taskId) {

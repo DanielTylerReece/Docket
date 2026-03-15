@@ -235,6 +235,18 @@ export class TodoistBackend extends BackendAdapter {
         return this._api.updateTask(listId, taskId, {title: newTitle});
     }
 
+    /**
+     * Update a task's due date.
+     * @param {string} listId
+     * @param {string} taskId
+     * @param {Date|null} dueDate - New due date, or null to clear
+     * @returns {Promise<object>} Updated task (internal model)
+     */
+    async updateTaskDueDate(listId, taskId, dueDate) {
+        this._ensureApi();
+        return this._api.updateTask(listId, taskId, {dueDate});
+    }
+
     // ── Checklist / Subtask ──────────────────────────────────────────
 
     /**
