@@ -456,7 +456,6 @@ const DocketSettings = GObject.registerClass(
             this._authGroup = authGroup;
             this.add(authGroup);
 
-            // Rebuild Todoist section (remove old one first if it exists)
             if (this._todoistGroup) {
                 this.remove(this._todoistGroup);
                 this._todoistGroup = null;
@@ -473,12 +472,10 @@ const DocketSettings = GObject.registerClass(
                 description: _('Connect your Todoist account using an API token'),
             });
 
-            // Status row
             this._todoistStatusRow = new Adw.ActionRow({
                 title: _('Status'),
             });
 
-            // Check if already authenticated
             const todoistAuth = new TodoistAuthManager();
             todoistAuth.loadTokens().then(loaded => {
                 if (loaded && todoistAuth.isAuthenticated()) {
@@ -493,7 +490,6 @@ const DocketSettings = GObject.registerClass(
             });
             todoistGroup.add(this._todoistStatusRow);
 
-            // Token entry row
             const tokenRow = new Adw.ActionRow({
                 title: _('API Token'),
                 subtitle: _('Find at Settings > Integrations > Developer'),
@@ -507,7 +503,6 @@ const DocketSettings = GObject.registerClass(
             tokenRow.add_suffix(this._todoistTokenEntry);
             todoistGroup.add(tokenRow);
 
-            // Buttons row
             const todoistButtonRow = new Adw.ActionRow();
 
             const todoistButtonBox = new Gtk.Box({
@@ -552,7 +547,6 @@ const DocketSettings = GObject.registerClass(
                 this._todoistStatusRow.set_subtitle(_('Connected'));
                 this._todoistSignOutButton.sensitive = true;
                 this._todoistTokenEntry.set_text('');
-                // Signal the extension to reload backends
                 this._settings.set_string('todoist-auth-event', `signin-${Date.now()}`);
             } catch (e) {
                 this._todoistStatusRow.set_subtitle(
@@ -589,7 +583,6 @@ const DocketSettings = GObject.registerClass(
             try {
                 const flow = await this._authManager.startDeviceCodeFlow();
 
-                // Copy code to clipboard and open browser
                 const clipboard = Gdk.Display.get_default().get_clipboard();
                 clipboard.set(flow.userCode);
 
@@ -597,7 +590,6 @@ const DocketSettings = GObject.registerClass(
                     flow.verificationUri, null, null, null
                 );
 
-                // Update auth section to show waiting state
                 this.remove(this._authGroup);
 
                 const authGroup = new Adw.PreferencesGroup({
@@ -625,10 +617,8 @@ const DocketSettings = GObject.registerClass(
                 this._authGroup = authGroup;
                 this.add(authGroup);
 
-                // Wait for poll completion
                 await flow.pollPromise;
 
-                // Clear device code from clipboard after 30 seconds
                 GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 30, () => {
                     try {
                         const cb = Gdk.Display.get_default().get_clipboard();
@@ -637,7 +627,6 @@ const DocketSettings = GObject.registerClass(
                     return GLib.SOURCE_REMOVE;
                 });
 
-                // Success — notify extension and rebuild UI
                 this._settings.set_string('auth-event', `sign-in:${Date.now()}`);
                 this.remove(this._authGroup);
                 this._buildAuthSection();
@@ -664,19 +653,16 @@ const DocketSettings = GObject.registerClass(
                 this._settings.set_string('auth-event', `sign-out:${Date.now()}`);
                 Utils.clearAccountData_(this._settings);
 
-                // Clear task list rows
                 let row = this._taskListBox.get_row_at_index(0);
                 while (row) {
                     this._taskListBox.remove(row);
                     row = this._taskListBox.get_row_at_index(0);
                 }
 
-                // Rebuild auth section
                 this.remove(this._authGroup);
                 this._authGroup = null;
                 this._buildAuthSection();
 
-                // Disable refresh button
                 this._backendRefreshButton.set_sensitive(false);
                 this._backendRefreshButton.set_tooltip_text(
                     _('Sign in to view task lists')
@@ -707,20 +693,17 @@ const DocketSettings = GObject.registerClass(
                     });
                 }
 
-                // Clear existing rows
                 let row = this._taskListBox.get_row_at_index(0);
                 while (row) {
                     this._taskListBox.remove(row);
                     row = this._taskListBox.get_row_at_index(0);
                 }
 
-                // Add rows
                 for (const list of lists) {
                     const taskListRow = new TaskListRow(list, this);
                     this._taskListBox.append(taskListRow);
                 }
 
-                // Configure refresh button
                 this._backendRefreshButton.set_sensitive(true);
                 this._backendRefreshButton.set_tooltip_text(
                     _('Reload task lists')

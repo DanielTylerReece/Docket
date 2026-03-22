@@ -28,9 +28,6 @@ function _validateUrl(url) {
     return url;
 }
 
-/**
- * HTTP client for Microsoft Graph API with automatic auth, retry, and backoff.
- */
 export class GraphHttpClient {
     constructor(authManager) {
         this._auth = authManager;
@@ -38,36 +35,18 @@ export class GraphHttpClient {
         this._session.timeout = 30;
     }
 
-    /**
-     * @param {string} url - Full URL
-     * @returns {Promise<{status: number, body: object}>}
-     */
     async get(url) {
         return this._request('GET', url, null);
     }
 
-    /**
-     * @param {string} url - Full URL
-     * @param {object} body - JSON body
-     * @returns {Promise<{status: number, body: object}>}
-     */
     async post(url, body) {
         return this._request('POST', url, body);
     }
 
-    /**
-     * @param {string} url - Full URL
-     * @param {object} body - JSON body
-     * @returns {Promise<{status: number, body: object}>}
-     */
     async patch(url, body) {
         return this._request('PATCH', url, body);
     }
 
-    /**
-     * @param {string} url - Full URL
-     * @returns {Promise<{status: number, body: object|null}>}
-     */
     async delete(url) {
         return this._request('DELETE', url, null);
     }
@@ -79,8 +58,6 @@ export class GraphHttpClient {
         }
         this._auth = null;
     }
-
-    // ── Private ─────────────────────────────────────────────────────
 
     async _request(method, url, body, retryCount = 0) {
         const validatedUrl = _validateUrl(url);
@@ -97,7 +74,7 @@ export class GraphHttpClient {
 
         const response = await this._send(message);
 
-        // 401: token expired — invalidate and refresh, retry once
+        // 401: token expired — invalidate and retry once
         if (response.status === 401 && retryCount < 1) {
             this._auth.invalidateAccessToken();
             return this._request(method, url, body, retryCount + 1);
@@ -111,9 +88,8 @@ export class GraphHttpClient {
             return this._request(method, url, body, retryCount + 1);
         }
 
-        // 5xx: server error — exponential backoff
         if (response.status >= 500 && retryCount < 3) {
-            const delay = Math.pow(2, retryCount); // 1s, 2s, 4s
+            const delay = Math.pow(2, retryCount);
             await this._wait(delay);
             return this._request(method, url, body, retryCount + 1);
         }
@@ -130,7 +106,6 @@ export class GraphHttpClient {
                         const bytes = session.send_and_read_finish(result);
                         const status = message.get_status();
 
-                        // 204 No Content — no body
                         if (status === 204) {
                             resolve({status, body: null});
                             return;

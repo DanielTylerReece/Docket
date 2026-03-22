@@ -29,9 +29,6 @@ function _validateUrl(url) {
     return url;
 }
 
-/**
- * HTTP client for Todoist API with automatic auth, retry, and backoff.
- */
 export class TodoistHttpClient {
     constructor(authManager) {
         this._auth = authManager;
@@ -39,40 +36,18 @@ export class TodoistHttpClient {
         this._session.timeout = 30;
     }
 
-    /**
-     * GET request.
-     * @param {string} path - Path relative to BASE_URL (e.g. '/api/v1/tasks')
-     * @returns {Promise<{status: number, body: object}>}
-     */
     async get(path) {
         return this._request('GET', `${BASE_URL}${path}`, null, null);
     }
 
-    /**
-     * POST request with JSON body.
-     * @param {string} path - Path relative to BASE_URL
-     * @param {object} body - JSON body
-     * @returns {Promise<{status: number, body: object}>}
-     */
     async post(path, body) {
         return this._request('POST', `${BASE_URL}${path}`, body, 'application/json');
     }
 
-    /**
-     * POST request with x-www-form-urlencoded body.
-     * @param {string} path - Path relative to BASE_URL
-     * @param {string} formBody - URL-encoded form body string
-     * @returns {Promise<{status: number, body: object}>}
-     */
     async postForm(path, formBody) {
         return this._request('POST', `${BASE_URL}${path}`, formBody, 'application/x-www-form-urlencoded');
     }
 
-    /**
-     * DELETE request.
-     * @param {string} path - Path relative to BASE_URL
-     * @returns {Promise<{status: number, body: object|null}>}
-     */
     async delete(path) {
         return this._request('DELETE', `${BASE_URL}${path}`, null, null);
     }
@@ -85,8 +60,6 @@ export class TodoistHttpClient {
         this._auth = null;
     }
 
-    // -- Private -------------------------------------------------------------
-
     async _request(method, url, body, contentType, retryCount = 0) {
         const validatedUrl = _validateUrl(url);
         const token = this._auth.getAccessToken();
@@ -94,7 +67,6 @@ export class TodoistHttpClient {
 
         message.get_request_headers().append('Authorization', `Bearer ${token}`);
 
-        // Add idempotency header for mutating requests
         if (method === 'POST' || method === 'DELETE')
             message.get_request_headers().append('X-Request-Id', GLib.uuid_string_random());
 
@@ -105,7 +77,6 @@ export class TodoistHttpClient {
                     new TextEncoder().encode(JSON.stringify(body))
                 );
             } else {
-                // form-encoded: body is already a string
                 bodyBytes = new GLib.Bytes(
                     new TextEncoder().encode(body)
                 );
@@ -115,11 +86,9 @@ export class TodoistHttpClient {
 
         const response = await this._send(message);
 
-        // 401: auth expired — throw immediately so callers can re-authenticate
         if (response.status === 401)
             throw new Error('auth-required');
 
-        // 429: rate limited — respect Retry-After, up to 3 retries
         if (response.status === 429 && retryCount < 3) {
             const backoffMs = [1000, 2000, 4000][retryCount];
             const raw = message.get_response_headers().get_one('Retry-After');
@@ -128,9 +97,8 @@ export class TodoistHttpClient {
             return this._request(method, url, body, contentType, retryCount + 1);
         }
 
-        // 5xx: server error — exponential backoff, up to 3 retries
         if (response.status >= 500 && retryCount < 3) {
-            const delayMs = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s
+            const delayMs = Math.pow(2, retryCount) * 1000;
             await this._waitMs(delayMs);
             return this._request(method, url, body, contentType, retryCount + 1);
         }
@@ -147,7 +115,6 @@ export class TodoistHttpClient {
                         const bytes = this._session.send_and_read_finish(result);
                         const status = message.get_status();
 
-                        // 204 No Content — no body
                         if (status === 204) {
                             resolve({status, body: null});
                             return;

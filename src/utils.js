@@ -143,10 +143,6 @@ export function removeDebounceTimeouts_() {
     _debounceTimeoutIds.clear();
 }
 
-/**
- * Clear all user-specific data from GSettings after sign-out.
- * @param {Gio.Settings} settings
- */
 export function clearAccountData_(settings) {
     settings.reset('delta-tokens');
     settings.reset('task-list-order');

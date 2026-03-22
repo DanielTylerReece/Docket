@@ -185,11 +185,9 @@ const Docket = GObject.registerClass(
                 // Facilitates lazy loading of tasks.
                 this._upperLimit = 0;
 
-                // Initialize backends
                 this._backends = new Map();
                 this._pendingBackends = [];
 
-                // Microsoft Graph backend
                 const graphBackend = new GraphBackend();
                 try {
                     const graphLoaded = await graphBackend.loadTokens();
@@ -200,7 +198,6 @@ const Docket = GObject.registerClass(
                     this._pendingBackends.push(graphBackend);
                 }
 
-                // Todoist backend
                 const todoistBackend = new TodoistBackend();
                 try {
                     const todoistLoaded = await todoistBackend.loadTokens();
@@ -211,7 +208,6 @@ const Docket = GObject.registerClass(
                     this._pendingBackends.push(todoistBackend);
                 }
 
-                // If keyring failures left pending backends, schedule retry
                 if (this._pendingBackends.length > 0) {
                     console.log(`[docket] ${this._pendingBackends.length} backend(s) pending, scheduling retry...`);
                     this._tokenRetryCount = 0;
@@ -329,7 +325,6 @@ const Docket = GObject.registerClass(
 
             this._storeTaskLists(true);
 
-            // Offline banner (hidden by default)
             this._offlineBanner = new St.BoxLayout({
                 style_class: 'docket-offline-banner',
                 visible: false,
@@ -383,7 +378,6 @@ const Docket = GObject.registerClass(
             this._scrollView.add_child(this._taskBox);
             this._contentBox.add_child(this._scrollView);
 
-            // Hide completed tasks row
             this._buildCompletedRow();
 
             this._themeChangedId = themeContext.connect(
@@ -455,7 +449,6 @@ const Docket = GObject.registerClass(
                 this._onTaskListSwitched.bind(this, false)
             );
 
-            // Filter button
             this._filterButton = new St.Button({
                 style_class: 'calendar-change-month-back pager-button pager',
                 can_focus: true,
@@ -489,13 +482,11 @@ const Docket = GObject.registerClass(
             );
             filterManager.addMenu(this._filterMenu);
 
-            // Prevent auto-close on item click
             this._filterMenu.itemActivated = () => {};
 
             this._filterMenuItems = {};
             this._filterToggleItem = null;
 
-            // GSettings listener for filter icon refresh (prefs sync)
             this._settingsFilterId = this._settings.connect(
                 'changed::show-only-selected-categories',
                 () => {
@@ -592,9 +583,6 @@ const Docket = GObject.registerClass(
             this._contentBox.add_child(this._headerBox);
         }
 
-        /**
-         * Builds a quick-add entry with a date picker button.
-         */
         _buildQuickAddEntry() {
             this._quickAddDueDate = null;
 
@@ -637,9 +625,6 @@ const Docket = GObject.registerClass(
             this._buildCalendarPicker();
         }
 
-        /**
-         * Builds the inline calendar picker (hidden by default).
-         */
         _buildCalendarPicker() {
             this._calendarViewDate = new Date();
 
@@ -649,7 +634,6 @@ const Docket = GObject.registerClass(
                 style_class: 'quick-add-calendar',
             });
 
-            // Navigation: < Month Year >
             const navRow = new St.BoxLayout({x_expand: true});
 
             const prevBtn = new St.Button({
@@ -678,7 +662,6 @@ const Docket = GObject.registerClass(
             navRow.add_child(nextBtn);
             this._calendarPicker.add_child(navRow);
 
-            // Day-of-week header
             const dowRow = new St.BoxLayout({x_expand: true});
             const dayNames = [
                 NC_('day abbreviation', 'Su'),
@@ -699,7 +682,6 @@ const Docket = GObject.registerClass(
             }
             this._calendarPicker.add_child(dowRow);
 
-            // 6 rows x 7 day buttons
             this._dayButtons = [];
             for (let w = 0; w < 6; w++) {
                 const weekRow = new St.BoxLayout({x_expand: true});
@@ -717,7 +699,6 @@ const Docket = GObject.registerClass(
                 this._calendarPicker.add_child(weekRow);
             }
 
-            // Bottom row: Today / Clear
             const bottomRow = new St.BoxLayout({
                 x_expand: true,
                 style: 'spacing: 8px; margin-top: 4px;',
@@ -757,10 +738,6 @@ const Docket = GObject.registerClass(
             this._updateCalendarGrid();
         }
 
-        /**
-         * Builds the "Hide completed tasks" dropdown row at the bottom
-         * of the panel content area.
-         */
         _buildCompletedRow() {
             const COMPLETED_MODE_LABELS = [
                 _('Never'),
@@ -769,7 +746,6 @@ const Docket = GObject.registerClass(
                 _('After a specific time of the day'),
             ];
 
-            // Bottom row container
             this._completedRow = new St.BoxLayout({
                 style_class: 'calendar-change-month-back',
                 x_align: Clutter.ActorAlign.CENTER,
@@ -809,7 +785,6 @@ const Docket = GObject.registerClass(
 
             this._contentBox.add_child(this._completedRow);
 
-            // PopupMenu for mode selection
             this._completedMenu = new PopupMenu.PopupMenu(
                 this._completedModeButton,
                 0.5,
@@ -833,7 +808,6 @@ const Docket = GObject.registerClass(
             );
             completedManager.addMenu(this._completedMenu);
 
-            // GSettings listener for prefs sync
             this._settingsCompletedId = this._settings.connect(
                 'changed::hide-completed-tasks',
                 () => {
@@ -844,9 +818,6 @@ const Docket = GObject.registerClass(
             );
         }
 
-        /**
-         * Populates the completed-tasks mode popup menu with 4 options.
-         */
         _onCompletedMenuOpen() {
             this._completedMenu.removeAll();
 
@@ -875,9 +846,6 @@ const Docket = GObject.registerClass(
             }
         }
 
-        /**
-         * Toggle calendar picker visibility.
-         */
         _toggleCalendarPicker() {
             this._calendarPicker.visible = !this._calendarPicker.visible;
             if (this._calendarPicker.visible) {
@@ -888,9 +856,6 @@ const Docket = GObject.registerClass(
             }
         }
 
-        /**
-         * Navigate the calendar by +/- months.
-         */
         _navigateCalendar(delta) {
             this._calendarViewDate.setMonth(
                 this._calendarViewDate.getMonth() + delta
@@ -898,9 +863,6 @@ const Docket = GObject.registerClass(
             this._updateCalendarGrid();
         }
 
-        /**
-         * Redraw the calendar grid for the current view month.
-         */
         _updateCalendarGrid() {
             const vd = this._calendarViewDate;
             const year = vd.getFullYear();
@@ -943,7 +905,6 @@ const Docket = GObject.registerClass(
                     btn.add_style_class_name('quick-add-calendar-day-other');
                 }
 
-                // Highlight today
                 if (isCurrentMonth &&
                     today.getFullYear() === year &&
                     today.getMonth() === month &&
@@ -951,7 +912,6 @@ const Docket = GObject.registerClass(
                     btn.add_style_class_name('quick-add-calendar-day-today');
                 }
 
-                // Highlight selected date
                 if (this._quickAddDueDate && isCurrentMonth &&
                     this._quickAddDueDate.getFullYear() === year &&
                     this._quickAddDueDate.getMonth() === month &&
@@ -961,9 +921,6 @@ const Docket = GObject.registerClass(
             }
         }
 
-        /**
-         * Handle clicking a day in the calendar grid.
-         */
         _onCalendarDayClicked(index) {
             const vd = this._calendarViewDate;
             const year = vd.getFullYear();
@@ -989,9 +946,6 @@ const Docket = GObject.registerClass(
             this._calendarPicker.visible = false;
         }
 
-        /**
-         * Update the date picker button to show the selected date or icon.
-         */
         _updateDateButtonLabel() {
             if (this._quickAddDueDate) {
                 const d = this._quickAddDueDate;
@@ -1131,7 +1085,6 @@ const Docket = GObject.registerClass(
 
             this._taskListMenu.addMenuItem(allTasksItem);
 
-            // "Create new list..." item
             const createSeparator = new PopupMenu.PopupSeparatorMenuItem();
             this._taskListMenu.addMenuItem(createSeparator);
 
@@ -1148,7 +1101,6 @@ const Docket = GObject.registerClass(
          * uses that one; if multiple, defaults to the first authenticated.
          */
         _onCreateTaskList() {
-            // Determine which backend to create in
             const authenticatedBackends = [...this._backends.entries()]
                 .filter(([_id, b]) => b.isAuthenticated());
 
@@ -1180,7 +1132,6 @@ const Docket = GObject.registerClass(
             });
             contentBox.add_child(entry);
 
-            // If multiple backends, show a selector
             let selectedBackendId = authenticatedBackends[0][0];
             if (authenticatedBackends.length > 1) {
                 const backendBox = new St.BoxLayout({
@@ -1244,7 +1195,6 @@ const Docket = GObject.registerClass(
 
             dialog.open(global.get_current_time());
 
-            // Focus the entry after dialog opens
             GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
                 entry.grab_key_focus();
                 return GLib.SOURCE_REMOVE;
@@ -1317,7 +1267,6 @@ const Docket = GObject.registerClass(
 
             dialog.open(global.get_current_time());
 
-            // Focus the entry and select all text after dialog opens
             GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
                 entry.grab_key_focus();
                 entry.get_clutter_text().set_selection(0, -1);
@@ -1425,17 +1374,12 @@ const Docket = GObject.registerClass(
             dialog.open(global.get_current_time());
         }
 
-        /**
-         * Populates the category filter popup menu each time it opens.
-         * Reads current state from GSettings so it stays in sync with prefs.
-         */
         _onFilterMenuOpen() {
             this._filterMenu.removeAll();
 
             const enabled = this._settings.get_boolean('show-only-selected-categories');
             const selected = this._settings.get_strv('selected-task-categories');
 
-            // Enable/disable toggle
             this._filterToggleItem = new PopupMenu.PopupSwitchMenuItem(
                 _('Enable Filter'), enabled
             );
@@ -1449,7 +1393,6 @@ const Docket = GObject.registerClass(
             this._filterMenu.addMenuItem(this._filterToggleItem);
             this._filterMenu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
-            // Category items
             const categories = [
                 { name: 'past',             label: _('Past') },
                 { name: 'today',            label: _('Due Today') },
@@ -1494,14 +1437,12 @@ const Docket = GObject.registerClass(
 
             this._settings.set_strv('selected-task-categories', selection);
 
-            // Auto-enable filtering if something is selected
             if (selection.length > 0 && !this._settings.get_boolean('show-only-selected-categories')) {
                 this._settings.set_boolean('show-only-selected-categories', true);
                 if (this._filterToggleItem)
                     this._filterToggleItem.setToggleState(true);
             }
 
-            // Update ornaments
             for (const catName in this._filterMenuItems) {
                 this._filterMenuItems[catName].setOrnament(
                     selection.includes(catName)
@@ -1586,9 +1527,6 @@ const Docket = GObject.registerClass(
             }
         }
 
-        /**
-         * Handles sync engine update events (tasks changed via delta query).
-         */
         _onSyncUpdate() {
             try {
                 if (this._activeTaskList === null) return;
@@ -1627,7 +1565,6 @@ const Docket = GObject.registerClass(
 
                 this._rootTasks.push(task);
 
-                // Map checklistItems as subtasks
                 if (task.checklistItems && task.checklistItems.length) {
                     const subtasks = task.checklistItems.map(ci => ({
                         id: ci.id,
@@ -2256,12 +2193,10 @@ const Docket = GObject.registerClass(
             try {
                 let tasks = this._syncEngine.getTasks(listId);
 
-                // Apply category filter
                 const categoryFilter = this._getCategoryFilter();
                 if (categoryFilter)
                     tasks = tasks.filter(categoryFilter);
 
-                // Apply completed filter
                 const completedFilter = this._getCompletedFilter();
                 if (completedFilter)
                     tasks = tasks.filter(completedFilter);
@@ -2391,7 +2326,6 @@ const Docket = GObject.registerClass(
 
             const filters = [];
 
-            // Date range filter based on selected categories
             const dueDateFilter = (task) => {
                 const due = task.dueDateTime;
 
@@ -2496,10 +2430,8 @@ const Docket = GObject.registerClass(
             const task = checkbox._task;
             const labelActor = checkbox.getLabelActor();
 
-            // Block checkbox toggle and tree rebuilds while editing
             this._editingTask = true;
 
-            // Hide the label, show an entry in its place
             const originalText = task.title;
             labelActor.hide();
 
@@ -2510,12 +2442,10 @@ const Docket = GObject.registerClass(
                 style: 'padding: 2px 4px;',
             });
 
-            // Insert entry after the label in the checkbox's child BoxLayout
             const parent = labelActor.get_parent();
             const labelIndex = parent.get_children().indexOf(labelActor);
             parent.insert_child_at_index(entry, labelIndex + 1);
 
-            // Focus the entry and select all text
             entry.grab_key_focus();
             entry.get_clutter_text().set_selection(0, -1);
 
@@ -2581,10 +2511,8 @@ const Docket = GObject.registerClass(
         _onAddSubtask(checkbox) {
             const task = checkbox._task;
 
-            // Block tree rebuilds while the subtask entry is visible
             this._editingTask = true;
 
-            // Create inline entry for subtask name
             const entry = new St.Entry({
                 hint_text: _('Add a subtask...'),
                 can_focus: true,
@@ -2592,7 +2520,6 @@ const Docket = GObject.registerClass(
                 style: 'padding: 2px 4px; margin-left: 24px; margin-top: 2px; margin-bottom: 2px;',
             });
 
-            // Insert the entry right after the checkbox in the parent taskBox
             const taskBox = checkbox.get_parent();
             if (!taskBox) {
                 this._editingTask = false;
@@ -2601,7 +2528,6 @@ const Docket = GObject.registerClass(
             const checkboxIndex = taskBox.get_children().indexOf(checkbox);
             taskBox.insert_child_at_index(entry, checkboxIndex + 1);
 
-            // Focus the entry
             entry.grab_key_focus();
 
             let cleaned = false;
@@ -2650,7 +2576,6 @@ const Docket = GObject.registerClass(
         _onDueDateTask(checkbox) {
             const task = checkbox._task;
 
-            // Close any existing task due-date picker
             if (this._activeDueDatePicker) {
                 try {
                     const prev = this._activeDueDatePicker;
@@ -2663,7 +2588,6 @@ const Docket = GObject.registerClass(
                 this._activeDueDatePicker = null;
             }
 
-            // Initialize selected month/day/year from task or today
             const initDate = task.dueDateTime
                 ? new Date(task.dueDateTime)
                 : new Date();
@@ -2678,39 +2602,33 @@ const Docket = GObject.registerClass(
                 _('December'),
             ];
 
-            // Helper: days in a given month/year
             function daysInMonth(month, year) {
                 return new Date(year, month + 1, 0).getDate();
             }
 
-            // Helper: clamp day to valid range for current month
             function clampDay() {
                 const max = daysInMonth(selMonth, selYear);
                 if (selDay > max) selDay = max;
             }
 
-            // Helper: update all display labels
             function updateDisplay() {
                 monthValueLabel.text = monthNames[selMonth];
                 dayValueLabel.text = `${selDay}`;
                 yearLabel.text = `${selYear}`;
             }
 
-            // Build the inline spinner picker
             const picker = new St.BoxLayout({
                 orientation: Clutter.Orientation.VERTICAL,
                 style_class: 'task-duedate-calendar date-spinner-picker',
             });
             this._activeDueDatePicker = picker;
 
-            // -- Spinner row: [Month spinner] [Year label] [Day spinner]
             const spinnerRow = new St.BoxLayout({
                 x_expand: true,
                 x_align: Clutter.ActorAlign.CENTER,
                 style_class: 'date-spinner-row',
             });
 
-            // Month spinner (vertical: up arrow, value, down arrow)
             const monthSpinner = new St.BoxLayout({
                 orientation: Clutter.Orientation.VERTICAL,
                 x_align: Clutter.ActorAlign.CENTER,
@@ -2746,7 +2664,6 @@ const Docket = GObject.registerClass(
             monthSpinner.add_child(monthValueLabel);
             monthSpinner.add_child(monthDownBtn);
 
-            // Year label (between the two spinners)
             const yearLabel = new St.Label({
                 text: `${selYear}`,
                 style_class: 'date-spinner-year',
@@ -2754,7 +2671,6 @@ const Docket = GObject.registerClass(
                 y_align: Clutter.ActorAlign.CENTER,
             });
 
-            // Day spinner (vertical: up arrow, value, down arrow)
             const daySpinner = new St.BoxLayout({
                 orientation: Clutter.Orientation.VERTICAL,
                 x_align: Clutter.ActorAlign.CENTER,
@@ -2790,13 +2706,11 @@ const Docket = GObject.registerClass(
             daySpinner.add_child(dayValueLabel);
             daySpinner.add_child(dayDownBtn);
 
-            // Assemble spinner row
             spinnerRow.add_child(monthSpinner);
             spinnerRow.add_child(yearLabel);
             spinnerRow.add_child(daySpinner);
             picker.add_child(spinnerRow);
 
-            // -- Bottom row: Today / Clear / OK
             const bottomRow = new St.BoxLayout({
                 x_expand: true,
                 style_class: 'date-spinner-actions',
@@ -2828,7 +2742,6 @@ const Docket = GObject.registerClass(
             bottomRow.add_child(okBtn);
             picker.add_child(bottomRow);
 
-            // Insert the picker right after the checkbox in the task box
             const taskBox = checkbox.get_parent();
             if (taskBox) {
                 const children = taskBox.get_children();
@@ -2836,9 +2749,7 @@ const Docket = GObject.registerClass(
                 taskBox.insert_child_at_index(picker, checkboxIndex + 1);
             }
 
-            // -- Spinner logic --
 
-            // Month up: increment month, wrap Dec->Jan (year++)
             monthUpBtn.connect('clicked', () => {
                 if (selMonth === 11) {
                     selMonth = 0;
@@ -2850,7 +2761,6 @@ const Docket = GObject.registerClass(
                 updateDisplay();
             });
 
-            // Month down: decrement month, wrap Jan->Dec (year--)
             monthDownBtn.connect('clicked', () => {
                 if (selMonth === 0) {
                     selMonth = 11;
@@ -2862,7 +2772,6 @@ const Docket = GObject.registerClass(
                 updateDisplay();
             });
 
-            // Day up: increment day, wrap past end-of-month to 1
             dayUpBtn.connect('clicked', () => {
                 const max = daysInMonth(selMonth, selYear);
                 if (selDay >= max)
@@ -2872,7 +2781,6 @@ const Docket = GObject.registerClass(
                 updateDisplay();
             });
 
-            // Day down: decrement day, wrap 1 to end-of-month
             dayDownBtn.connect('clicked', () => {
                 if (selDay <= 1)
                     selDay = daysInMonth(selMonth, selYear);
@@ -2881,9 +2789,7 @@ const Docket = GObject.registerClass(
                 updateDisplay();
             });
 
-            // -- Action buttons --
 
-            // Today: set spinners to today's date
             todayBtn.connect('clicked', () => {
                 const now = new Date();
                 selMonth = now.getMonth();
@@ -2892,27 +2798,22 @@ const Docket = GObject.registerClass(
                 updateDisplay();
             });
 
-            // Clear: remove due date and close picker
             clearBtn.connect('clicked', () => {
                 applyDate.call(this, null);
             });
 
-            // OK: apply selected date and close picker
             okBtn.connect('clicked', () => {
                 const date = new Date(selYear, selMonth, selDay);
                 date.setHours(0, 0, 0, 0);
                 applyDate.call(this, date);
             });
 
-            // Helper: apply the selected date and close picker
             function applyDate(date) {
-                // Remove picker
                 if (picker.get_parent())
                     picker.get_parent().remove_child(picker);
                 picker.destroy();
                 this._activeDueDatePicker = null;
 
-                // Update via sync engine
                 this._syncEngine.updateTaskDueDate(
                     task._taskList, task.id, date
                 ).catch(e => logError(e));
@@ -3012,7 +2913,6 @@ const Docket = GObject.registerClass(
                     if (action === 'sign-out')
                         Utils.clearAccountData_(this._settings);
 
-                    // Tear down current state and re-init
                     if (this._tokenRetryId) {
                         GLib.source_remove(this._tokenRetryId);
                         this._tokenRetryId = 0;
@@ -3073,7 +2973,6 @@ const Docket = GObject.registerClass(
                 }
             );
 
-            // Todoist auth event listener
             if (!this._settingsTodoistAuthId) {
                 this._settingsTodoistAuthId = this._settings.connect(
                     'changed::todoist-auth-event',
@@ -3087,7 +2986,6 @@ const Docket = GObject.registerClass(
                             return;
                         this._lastTodoistAuthEventTime = now;
 
-                        // Todoist token changed in prefs — reload backends
                         if (!this._initInProgress) {
                             this._initInProgress = true;
                             this._reinitBackends().finally(() => {
@@ -3104,13 +3002,11 @@ const Docket = GObject.registerClass(
          * Used when auth state changes (e.g. Todoist token added/removed).
          */
         async _reinitBackends() {
-            // Destroy existing sync engine
             if (this._syncEngine) {
                 this._syncEngine.destroy();
                 this._syncEngine = null;
             }
 
-            // Destroy existing backends
             if (this._backends) {
                 for (const [, backend] of this._backends)
                     backend.destroy();
@@ -3122,7 +3018,6 @@ const Docket = GObject.registerClass(
                 this._pendingBackends = null;
             }
 
-            // Tear down UI for full re-init
             if (this._filterMenu) {
                 if (this._filterMenu.actor.get_parent() === Main.uiGroup)
                     Main.uiGroup.remove_child(this._filterMenu.actor);
@@ -3157,7 +3052,6 @@ const Docket = GObject.registerClass(
             }
             this._linkLabel.hide();
 
-            // Re-initialize everything
             await this._initTaskLists();
         }
 
@@ -3348,10 +3242,8 @@ const Docket = GObject.registerClass(
                 this._taskListNameButton.set_reactive(true);
             }
 
-            // Filter button: always visible when task lists exist
             this._filterButton.visible = this._taskLists.length > 0;
 
-            // Sync filter icon state
             this._refreshFilterIcon(
                 this._settings.get_boolean('show-only-selected-categories') &&
                 this._settings.get_strv('selected-task-categories').length > 0

@@ -15,10 +15,6 @@ const CACHE_VERSION = 1;
  * logic lives inside BackendAdapter implementations passed via constructor.
  */
 export class SyncEngine {
-    /**
-     * @param {Map<string, BackendAdapter>} backends - backendId → adapter instance
-     * @param {Gio.Settings|null} settings - GSettings instance (null for tests)
-     */
     constructor(backends, settings = null) {
         this._backends = backends;
         this._settings = settings;
@@ -55,22 +51,15 @@ export class SyncEngine {
 
     // ── Initialization ──────────────────────────────────────────────
 
-    /**
-     * Load disk cache first (instant UI), then fetch from network.
-     * On network failure, keeps showing cached data and emits 'offline'.
-     */
     async initialize() {
-        // Show cached data immediately
         const hadCache = this._loadCacheFromDisk();
         if (hadCache) {
             this._emit('lists-changed');
             this._emit('tasks-changed');
         }
 
-        // Load persisted delta tokens
         this._loadDeltaTokens();
 
-        // Try network fetch
         try {
             await this._fetchAllFromBackends();
             this._saveCacheToDisk();
@@ -101,9 +90,6 @@ export class SyncEngine {
 
     // ── Sync ────────────────────────────────────────────────────────
 
-    /**
-     * Delta sync all lists across all authenticated backends.
-     */
     async sync() {
         try {
             let changed = false;
@@ -147,9 +133,6 @@ export class SyncEngine {
         }
     }
 
-    /**
-     * Full re-fetch from all backends, replacing the cache entirely.
-     */
     async fullSync() {
         try {
             await this._fetchAllFromBackends();
@@ -178,43 +161,29 @@ export class SyncEngine {
 
     // ── Accessors ───────────────────────────────────────────────────
 
-    /** @returns {object[]} Cached task lists (merged from all backends) */
     getTaskLists() {
         return this._taskLists;
     }
 
-    /**
-     * @param {string} listId
-     * @returns {object[]} Cached tasks for the given list
-     */
     getTasks(listId) {
         return this._tasks.get(listId) || [];
     }
 
-    /** @returns {Date|null} Last successful network sync timestamp */
     getLastSyncTime() {
         return this._lastSyncTime;
     }
 
-    /** @returns {boolean} Whether we're currently in offline mode */
     get isOffline() {
         return this._isOffline;
     }
 
     // ── Task List CRUD ─────────────────────────────────────────────
 
-    /**
-     * Create a new task list in the specified backend.
-     * @param {string} backendId - Which backend to create the list in
-     * @param {string} name - Display name for the new list
-     * @returns {Promise<object>} Created task list
-     */
     async createTaskList(backendId, name) {
         const backend = this._backends.get(backendId);
         if (!backend)
             throw new Error(`Backend '${backendId}' not registered`);
 
-        // Optimistic: add a placeholder list immediately
         const tempId = `_temp_${Date.now()}_${Math.random().toString(36).slice(2)}`;
         const placeholderList = {id: tempId, displayName: name, _backendId: backendId};
         this._taskLists.push(placeholderList);
@@ -223,12 +192,10 @@ export class SyncEngine {
         this._saveCacheToDisk();
         this._emit('lists-changed');
 
-        // Background API call
         this._enqueueOperation({
             description: `Create list "${name}"`,
             execute: async () => {
                 const list = await backend.createTaskList(name);
-                // Replace placeholder with real list
                 const idx = this._taskLists.findIndex(l => l.id === tempId);
                 if (idx >= 0)
                     this._taskLists[idx] = list;
@@ -252,26 +219,17 @@ export class SyncEngine {
         return placeholderList;
     }
 
-    /**
-     * Rename a task list.
-     * @param {string} listId
-     * @param {string} newName
-     * @returns {Promise<object>} Updated task list
-     */
     async renameTaskList(listId, newName) {
         const backend = this._getBackendForList(listId);
 
-        // Save old name for rollback
         const idx = this._taskLists.findIndex(l => l.id === listId);
         const oldName = idx >= 0 ? this._taskLists[idx].displayName : newName;
 
-        // Optimistic: update cache immediately
         if (idx >= 0)
             this._taskLists[idx].displayName = newName;
         this._saveCacheToDisk();
         this._emit('lists-changed');
 
-        // Background API call
         this._enqueueOperation({
             description: `Rename list to "${newName}"`,
             execute: () => backend.renameTaskList(listId, newName),
@@ -285,21 +243,15 @@ export class SyncEngine {
         });
     }
 
-    /**
-     * Delete a task list.
-     * @param {string} listId
-     */
     async deleteTaskList(listId) {
         const backend = this._getBackendForList(listId);
         const backendId = backend.id;
 
-        // Save state for rollback
         const removedList = this._taskLists.find(l => l.id === listId);
         const removedTasks = this._tasks.get(listId) || [];
         const removedDeltaKey = `${backendId}:${listId}`;
         const removedDeltaToken = this._deltaTokens.get(removedDeltaKey);
 
-        // Optimistic: remove from cache immediately
         this._taskLists = this._taskLists.filter(l => l.id !== listId);
         this._tasks.delete(listId);
         this._listBackendMap.delete(listId);
@@ -308,12 +260,10 @@ export class SyncEngine {
         this._saveCacheToDisk();
         this._emit('lists-changed');
 
-        // Background API call
         this._enqueueOperation({
             description: `Delete list "${removedList?.displayName || listId}"`,
             execute: () => backend.deleteTaskList(listId),
             rollback: () => {
-                // Restore list, tasks, backend mapping, and delta token
                 if (removedList)
                     this._taskLists.push(removedList);
                 this._tasks.set(listId, removedTasks);
@@ -329,17 +279,9 @@ export class SyncEngine {
 
     // ── Task CRUD ────────────────────────────────────────────────────
 
-    /**
-     * Create a task in the specified list, routed to the correct backend.
-     * @param {string} listId
-     * @param {string} title
-     * @param {object} [opts] - Optional fields (dueDateTime, importance, etc.)
-     * @returns {Promise<object>} Created task (internal model)
-     */
     async createTask(listId, title, opts = {}) {
         const backend = this._getBackendForList(listId);
 
-        // Optimistic: add a placeholder task immediately
         const tempId = `_temp_${Date.now()}_${Math.random().toString(36).slice(2)}`;
         const placeholderTask = {
             id: tempId,
@@ -351,7 +293,6 @@ export class SyncEngine {
             checklistItems: [],
             _isOptimistic: true,
         };
-        // Attach getter aliases expected by the UI
         Object.defineProperties(placeholderTask, {
             '_uid':      { get() { return this.id; } },
             '_due':      { get() { return this.dueDateTime; } },
@@ -363,12 +304,10 @@ export class SyncEngine {
         this._saveCacheToDisk();
         this._emit('tasks-changed');
 
-        // Background API call
         this._enqueueOperation({
             description: `Create task "${title}"`,
             execute: async () => {
                 const realTask = await backend.createTask(listId, title, opts);
-                // Replace placeholder with real task
                 const current = this._tasks.get(listId) || [];
                 const idx = current.findIndex(t => t.id === tempId);
                 if (idx >= 0)
@@ -388,31 +327,24 @@ export class SyncEngine {
         return placeholderTask;
     }
 
-    /**
-     * Mark a task as completed.
-     */
     async completeTask(listId, taskId) {
         const backend = this._getBackendForList(listId);
 
-        // Save old status for rollback
         const tasks = this._tasks.get(listId) || [];
         const task = tasks.find(t => t.id === taskId);
         const oldStatus = task ? task.status : 'notStarted';
         const taskTitle = task ? task.title : taskId;
 
-        // Optimistic: mark completed immediately
         if (task) task.status = 'completed';
         this._saveCacheToDisk();
         this._emit('tasks-changed');
 
-        // Background API call
         this._enqueueOperation({
             description: `Complete task "${taskTitle}"`,
             execute: async () => {
                 const updated = await backend.completeTask(listId, taskId);
                 this._updateTaskInCache(listId, updated);
                 this._saveCacheToDisk();
-                // No emit needed — cache already shows completed state
             },
             rollback: () => {
                 const current = this._tasks.get(listId) || [];
@@ -424,24 +356,18 @@ export class SyncEngine {
         });
     }
 
-    /**
-     * Mark a task as not started (uncomplete).
-     */
     async uncompleteTask(listId, taskId) {
         const backend = this._getBackendForList(listId);
 
-        // Save old status for rollback
         const tasks = this._tasks.get(listId) || [];
         const task = tasks.find(t => t.id === taskId);
         const oldStatus = task ? task.status : 'completed';
         const taskTitle = task ? task.title : taskId;
 
-        // Optimistic: mark not started immediately
         if (task) task.status = 'notStarted';
         this._saveCacheToDisk();
         this._emit('tasks-changed');
 
-        // Background API call
         this._enqueueOperation({
             description: `Uncomplete task "${taskTitle}"`,
             execute: async () => {
@@ -459,26 +385,17 @@ export class SyncEngine {
         });
     }
 
-    /**
-     * Update a task's title.
-     * @param {string} listId
-     * @param {string} taskId
-     * @param {string} newTitle
-     */
     async updateTaskTitle(listId, taskId, newTitle) {
         const backend = this._getBackendForList(listId);
 
-        // Save old title for rollback
         const tasks = this._tasks.get(listId) || [];
         const task = tasks.find(t => t.id === taskId);
         const oldTitle = task ? task.title : newTitle;
 
-        // Optimistic: update cache immediately
         if (task) task.title = newTitle;
         this._saveCacheToDisk();
         this._emit('tasks-changed');
 
-        // Background API call
         this._enqueueOperation({
             description: `Rename task to "${newTitle}"`,
             execute: () => backend.updateTaskTitle(listId, taskId, newTitle),
@@ -492,27 +409,18 @@ export class SyncEngine {
         });
     }
 
-    /**
-     * Update a task's due date.
-     * @param {string} listId
-     * @param {string} taskId
-     * @param {Date|null} dueDate - New due date, or null to clear
-     */
     async updateTaskDueDate(listId, taskId, dueDate) {
         const backend = this._getBackendForList(listId);
 
-        // Save old due date for rollback
         const tasks = this._tasks.get(listId) || [];
         const task = tasks.find(t => t.id === taskId);
         const oldDueDate = task ? task.dueDateTime : null;
         const taskTitle = task ? task.title : taskId;
 
-        // Optimistic: update cache immediately
         if (task) task.dueDateTime = dueDate;
         this._saveCacheToDisk();
         this._emit('tasks-changed');
 
-        // Background API call
         this._enqueueOperation({
             description: `Update due date for "${taskTitle}"`,
             execute: () => backend.updateTaskDueDate(listId, taskId, dueDate),
@@ -526,22 +434,16 @@ export class SyncEngine {
         });
     }
 
-    /**
-     * Delete a task.
-     */
     async deleteTask(listId, taskId) {
         const backend = this._getBackendForList(listId);
 
-        // Save removed task for rollback
         const tasks = this._tasks.get(listId) || [];
         const removedTask = tasks.find(t => t.id === taskId);
 
-        // Optimistic: remove from cache immediately
         this._tasks.set(listId, tasks.filter(t => t.id !== taskId));
         this._saveCacheToDisk();
         this._emit('tasks-changed');
 
-        // Background API call
         this._enqueueOperation({
             description: `Delete task "${removedTask?.title || taskId}"`,
             execute: () => backend.deleteTask(listId, taskId),
@@ -557,17 +459,9 @@ export class SyncEngine {
         });
     }
 
-    /**
-     * Create a subtask/checklist item under a parent task.
-     * Routes to the correct backend based on the list's backend.
-     * @param {string} listId
-     * @param {string} taskId - Parent task ID
-     * @param {string} title - Subtask title
-     */
     async createSubtask(listId, taskId, title) {
         const backend = this._getBackendForList(listId);
 
-        // Optimistic: add placeholder checklist item immediately
         const tempId = `_temp_${Date.now()}_${Math.random().toString(36).slice(2)}`;
         const tasks = this._tasks.get(listId) || [];
         const parentTask = tasks.find(t => t.id === taskId);
@@ -583,12 +477,10 @@ export class SyncEngine {
         this._saveCacheToDisk();
         this._emit('tasks-changed');
 
-        // Background API call + full sync to get real IDs
         this._enqueueOperation({
             description: `Create subtask "${title}"`,
             execute: async () => {
                 await backend.createSubtask(listId, taskId, title);
-                // Full sync replaces cache with real data
                 await this.fullSync();
             },
             rollback: () => {
@@ -605,15 +497,11 @@ export class SyncEngine {
         });
     }
 
-    /**
-     * Delete a subtask/checklist item.
-     */
     async deleteSubtask(listId, taskId, subtaskId) {
         const backend = this._getBackendForList(listId);
         const tasks = this._tasks.get(listId) || [];
         const task = tasks.find(t => t.id === taskId);
 
-        // Save for rollback
         let removedItem = null;
         let removedIndex = -1;
         if (task && task.checklistItems) {
@@ -638,9 +526,6 @@ export class SyncEngine {
         });
     }
 
-    /**
-     * Toggle a checklist item's checked state.
-     */
     async toggleChecklistItem(listId, taskId, itemId) {
         const backend = this._getBackendForList(listId);
         const tasks = this._tasks.get(listId) || [];
@@ -650,26 +535,22 @@ export class SyncEngine {
         const item = task.checklistItems?.find(ci => ci.id === itemId);
         if (!item) return;
 
-        // Save old state for rollback
         const oldIsChecked = item.isChecked;
         const oldCheckedDateTime = item.checkedDateTime;
         const newIsChecked = !item.isChecked;
         const itemName = item.displayName || itemId;
 
-        // Optimistic: toggle immediately
         item.isChecked = newIsChecked;
         item.checkedDateTime = newIsChecked ? new Date() : null;
         this._saveCacheToDisk();
         this._emit('tasks-changed');
 
-        // Background API call
         this._enqueueOperation({
             description: `Toggle subtask "${itemName}"`,
             execute: async () => {
                 const updated = await backend.toggleChecklistItem(
                     listId, taskId, itemId, {isChecked: newIsChecked}
                 );
-                // Update with server-authoritative values
                 item.isChecked = updated.isChecked;
                 item.checkedDateTime = updated.checkedDateTime
                     ? new Date(updated.checkedDateTime)
@@ -692,10 +573,6 @@ export class SyncEngine {
 
     // ── Polling ─────────────────────────────────────────────────────
 
-    /**
-     * Start periodic polling.
-     * @param {number} intervalSeconds
-     */
     startPolling(intervalSeconds) {
         this.stopPolling();
         this._pollSourceId = GLib.timeout_add_seconds(
@@ -709,9 +586,6 @@ export class SyncEngine {
         );
     }
 
-    /**
-     * Stop periodic polling.
-     */
     stopPolling() {
         if (this._pollSourceId) {
             GLib.source_remove(this._pollSourceId);
@@ -721,11 +595,6 @@ export class SyncEngine {
 
     // ── Signals ─────────────────────────────────────────────────────
 
-    /**
-     * Connect to a signal.
-     * @param {string} signal - 'tasks-changed'|'lists-changed'|'auth-required'|'offline'|'online'|'operation-failed'
-     * @param {Function} callback
-     */
     connect(signal, callback) {
         if (this._signals[signal])
             this._signals[signal].push(callback);
@@ -733,15 +602,11 @@ export class SyncEngine {
 
     // ── Lifecycle ───────────────────────────────────────────────────
 
-    /**
-     * Cleanup SyncEngine's own state. Does NOT destroy backends (extension.js owns them).
-     */
     destroy() {
         this._destroyed = true;
         this.stopPolling();
 
-        // Cancel any pending retry timers in the operation queue
-        for (const timerId of this._queueTimerIds) {
+            for (const timerId of this._queueTimerIds) {
             GLib.source_remove(timerId);
         }
         this._queueTimerIds = [];
@@ -756,11 +621,6 @@ export class SyncEngine {
 
     // ── Private: Optimistic Operation Queue ────────────────────────
 
-    /**
-     * GJS-compatible async delay using GLib.timeout_add.
-     * @param {number} ms - Milliseconds to wait
-     * @returns {Promise<void>}
-     */
     _delay(ms) {
         return new Promise(resolve => {
             const id = GLib.timeout_add(GLib.PRIORITY_DEFAULT, ms, () => {
@@ -772,28 +632,11 @@ export class SyncEngine {
         });
     }
 
-    /**
-     * Enqueue a background API operation with retry and rollback support.
-     * Operations are processed sequentially to avoid race conditions.
-     *
-     * @param {object} opts
-     * @param {string} opts.description - Human-readable description for failure dialog
-     * @param {Function} opts.execute - Async function that performs the API call
-     * @param {Function} opts.rollback - Function to revert the optimistic cache update
-     * @param {number} [opts.retries=3] - Max retry attempts
-     * @param {number} [opts.baseDelay=1000] - Base delay in ms for exponential backoff
-     */
     _enqueueOperation({description, execute, rollback, retries = 3, baseDelay = 1000}) {
         this._opQueue.push({description, execute, rollback, retries, baseDelay, attempt: 0});
         this._processQueue();
     }
 
-    /**
-     * Process the operation queue sequentially.
-     * Each operation is retried with exponential backoff on failure.
-     * On final failure, the optimistic update is rolled back and
-     * an 'operation-failed' signal is emitted for UI notification.
-     */
     async _processQueue() {
         if (this._processingQueue) return;
         this._processingQueue = true;
@@ -814,13 +657,11 @@ export class SyncEngine {
 
                 if (op.attempt >= op.retries) {
                     this._opQueue.shift();
-                    // Roll back the optimistic cache update
                     try {
                         op.rollback();
                     } catch (re) {
                         console.error(`[sync-engine] Rollback error: ${re.message}`);
                     }
-                    // Notify UI of the failure
                     this._emit('operation-failed', op.description);
                 } else {
                     // Exponential backoff: 1s, 2s, 4s, ...
@@ -835,11 +676,6 @@ export class SyncEngine {
 
     // ── Private: Backend Routing ────────────────────────────────────
 
-    /**
-     * Look up which backend owns a given list.
-     * @param {string} listId
-     * @returns {BackendAdapter}
-     */
     _getBackendForList(listId) {
         const backendId = this._listBackendMap.get(listId);
         if (!backendId)
@@ -852,10 +688,6 @@ export class SyncEngine {
 
     // ── Private: Network Fetch ──────────────────────────────────────
 
-    /**
-     * Fetch all lists and tasks from every authenticated backend.
-     * Replaces in-memory cache entirely.
-     */
     async _fetchAllFromBackends() {
         const newLists = [];
         const newTasks = new Map();
@@ -884,12 +716,6 @@ export class SyncEngine {
 
     // ── Private: Delta Sync ─────────────────────────────────────────
 
-    /**
-     * Delta sync a single list via its backend.
-     * @param {BackendAdapter} backend
-     * @param {string} listId
-     * @returns {Promise<boolean>} true if tasks changed
-     */
     async _deltaSync(backend, listId) {
         const tokenKey = `${backend.id}:${listId}`;
         const deltaToken = this._deltaTokens.get(tokenKey) || null;
@@ -918,8 +744,7 @@ export class SyncEngine {
             return false;
         }
 
-        // Merge delta changes into existing task list
-        const current = this._tasks.get(listId) || [];
+            const current = this._tasks.get(listId) || [];
         const taskMap = new Map(current.map(t => [t.id, t]));
 
         for (const t of result.tasks) {
@@ -968,8 +793,7 @@ export class SyncEngine {
     _saveDeltaTokens() {
         if (!this._settings) return;
 
-        // Group tokens by backend
-        const byBackend = new Map();
+            const byBackend = new Map();
         for (const [compositeKey, token] of this._deltaTokens) {
             const sepIdx = compositeKey.indexOf(':');
             if (sepIdx < 0) continue;
@@ -994,17 +818,10 @@ export class SyncEngine {
 
     // ── Private: Disk Cache ─────────────────────────────────────────
 
-    /**
-     * @returns {string} Path to the on-disk task cache JSON file
-     */
     _getCachePath() {
         return GLib.build_filenamev([GLib.get_user_cache_dir(), 'docket', 'task-cache.json']);
     }
 
-    /**
-     * Load cached task data from disk.
-     * @returns {boolean} true if cache was loaded successfully
-     */
     _loadCacheFromDisk() {
         try {
             const path = this._getCachePath();
@@ -1017,17 +834,14 @@ export class SyncEngine {
 
             if (data.version !== CACHE_VERSION) return false;
 
-            // Rebuild task lists
             this._taskLists = Array.isArray(data.taskLists) ? data.taskLists : [];
 
-            // Rebuild list → backend mapping
             this._listBackendMap.clear();
             for (const list of this._taskLists) {
                 if (list._backendId)
                     this._listBackendMap.set(list.id, list._backendId);
             }
 
-            // Rebuild tasks with proper deserialization
             this._tasks.clear();
             if (data.tasks && typeof data.tasks === 'object') {
                 for (const [listId, serializedTasks] of Object.entries(data.tasks)) {
@@ -1037,7 +851,6 @@ export class SyncEngine {
                 }
             }
 
-            // Restore last sync time
             if (data.lastSync)
                 this._lastSyncTime = new Date(data.lastSync);
 
@@ -1050,16 +863,12 @@ export class SyncEngine {
         }
     }
 
-    /**
-     * Save current task data to disk cache. Non-fatal on failure.
-     */
     _saveCacheToDisk() {
         try {
             const path = this._getCachePath();
             const dir = GLib.path_get_dirname(path);
             GLib.mkdir_with_parents(dir, 0o755);
 
-            // Serialize tasks
             const tasksObj = {};
             for (const [listId, tasks] of this._tasks) {
                 tasksObj[listId] = tasks.map(t => TaskModel.serialize(t));
@@ -1094,11 +903,6 @@ export class SyncEngine {
 
     // ── Private: Network Error Detection ────────────────────────────
 
-    /**
-     * Heuristic to detect network-level errors vs. API/auth errors.
-     * @param {Error} e
-     * @returns {boolean}
-     */
     _isNetworkError(e) {
         const msg = (e.message || '').toLowerCase();
         return msg.includes('network') ||

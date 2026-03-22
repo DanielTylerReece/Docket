@@ -16,26 +16,21 @@ const TOKEN_SCHEMA = new Secret.Schema(
 );
 
 /**
- * Authentication manager for Microsoft Graph API using device code flow.
- * Stores tokens in GNOME Keyring via libsecret.
+ * Microsoft Graph device code flow auth with libsecret token storage.
  */
 export class AuthManager {
     constructor() {
         this._session = new Soup.Session();
         this._accessToken = null;
         this._refreshToken = null;
-        this._expiresAt = 0; // Unix timestamp in seconds
+        this._expiresAt = 0;
         this._pollSourceId = 0;
         this._destroyed = false;
         this._refreshPromise = null;
     }
 
-    /**
-     * Returns a valid access token, refreshing if needed.
-     * @returns {Promise<string>} Bearer access token
-     */
     async getAccessToken() {
-        // If token expires within 5 minutes, proactively refresh
+        // Proactive refresh if token expires within 5 minutes
         const now = GLib.get_real_time() / 1000000;
         if (this._accessToken && this._expiresAt - now > 300)
             return this._accessToken;
@@ -50,9 +45,7 @@ export class AuthManager {
                 return this._accessToken;
             } catch (e) {
                 console.error(`[auth] Token refresh failed: ${e.message}`);
-                // Only clear tokens for auth errors (invalid grant/token).
-                // Network errors and transient failures should NOT destroy
-                // stored credentials — the user would have to re-authenticate.
+                // Only clear tokens for auth errors, not transient network failures
                 const msg = (e.message || '').toLowerCase();
                 if (msg.includes('invalid_grant') ||
                     msg.includes('invalid_client') ||
@@ -64,7 +57,6 @@ export class AuthManager {
             }
         }
 
-        // Try loading from keyring
         await this._loadTokens();
         if (this._accessToken && this._expiresAt - now > 300)
             return this._accessToken;
@@ -81,10 +73,6 @@ export class AuthManager {
         throw new Error('auth-required');
     }
 
-    /**
-     * Starts the device code flow.
-     * @returns {Promise<{userCode, verificationUri, message, pollPromise}>}
-     */
     async startDeviceCodeFlow() {
         const params = Soup.form_encode_hash({
             'client_id': CLIENT_ID,
@@ -110,27 +98,15 @@ export class AuthManager {
         };
     }
 
-    /**
-     * Checks if we have stored tokens (sync check — loads from memory cache).
-     * Call _loadTokens() first for full check.
-     * @returns {boolean}
-     */
     isAuthenticated() {
         const now = GLib.get_real_time() / 1000000;
         return !!(this._accessToken && this._expiresAt > now) || !!this._refreshToken;
     }
 
-    /**
-     * Loads tokens from GNOME Keyring into memory.
-     * @returns {Promise<boolean>} true if tokens were loaded
-     */
     async loadTokens() {
         return this._loadTokens();
     }
 
-    /**
-     * Clears all stored tokens from memory and GNOME Keyring.
-     */
     async clearTokens() {
         this._accessToken = null;
         this._refreshToken = null;
@@ -147,17 +123,11 @@ export class AuthManager {
         } catch (e) { /* ignore */ }
     }
 
-    /**
-     * Invalidates the cached access token, forcing a refresh on next use.
-     */
     invalidateAccessToken() {
         this._accessToken = null;
         this._expiresAt = 0;
     }
 
-    /**
-     * Cleanup — cancel any pending poll timers and clear credentials from memory.
-     */
     destroy() {
         this._destroyed = true;
         this._accessToken = null;
@@ -174,8 +144,9 @@ export class AuthManager {
         }
     }
 
-    // ── Private methods ─────────────────────────────────────────────
+    // ── Private ─────────────────────────────────────────────────────
 
+    // Soup3 in GJS requires the 4-arg callback form for send_and_read_async
     _sendRequest(message) {
         return new Promise((resolve, reject) => {
             this._session.send_and_read_async(
@@ -227,27 +198,23 @@ export class AuthManager {
 
                     const error = data['error'];
                     if (error === 'authorization_pending') {
-                        // Keep polling
                         this._pollSourceId = GLib.timeout_add_seconds(
                             GLib.PRIORITY_DEFAULT, interval, poll
                         );
                         return;
                     }
                     if (error === 'slow_down') {
-                        // Increase interval by 5 seconds
                         this._pollSourceId = GLib.timeout_add_seconds(
                             GLib.PRIORITY_DEFAULT, interval + 5, poll
                         );
                         return;
                     }
-                    // authorization_declined, expired_token, bad_verification_code
                     reject(new Error(data['error_description'] || error));
                 }).catch(reject);
 
                 return GLib.SOURCE_REMOVE;
             };
 
-            // Start first poll after interval
             this._pollSourceId = GLib.timeout_add_seconds(
                 GLib.PRIORITY_DEFAULT, interval, poll
             );
@@ -256,8 +223,7 @@ export class AuthManager {
 
     async _refreshAccessToken() {
         if (!this._refreshToken || typeof this._refreshToken !== 'string' || this._refreshToken.length < 10) {
-            // Refresh token not loaded — may be a keyring timing issue.
-            // Try loading from keyring one more time before giving up.
+            // Refresh token not loaded — may be a keyring timing issue
             await this._loadTokens();
             if (!this._refreshToken || typeof this._refreshToken !== 'string' || this._refreshToken.length < 10) {
                 console.log('[auth] No valid refresh token after retry — clearing credentials');
@@ -307,7 +273,7 @@ export class AuthManager {
             return !!(this._accessToken || this._refreshToken);
         } catch (e) {
             console.error(`[auth] Failed to load tokens: ${e.message}`);
-            throw e;  // Let caller handle — may be keyring locked (temporary)
+            throw e;
         }
     }
 
