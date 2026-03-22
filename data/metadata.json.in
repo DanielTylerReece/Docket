@@ -5,10 +5,8 @@
     "gresource": "@EXTENSION_BASE@.gresource",
     "epath": "@EXTENSION_PATH@",
     "name": "Docket",
-    "description": "Display Microsoft To Do tasks next to the calendar widget in the GNOME Shell date menu.",
+    "description": "Display Microsoft To Do and Todoist tasks next to the calendar in the GNOME Shell date menu.",
     "version": @EXTENSION_VERSION@,
-    "shell-version": [ "48", "49" ],
-    "url": "https://github.com/DanielTylerReece/Docket",
-    "wiki": "https://github.com/DanielTylerReece/Docket/wiki",
-    "dependencies": "https://github.com/DanielTylerReece/Docket#installation"
+    "shell-version": [ "49" ],
+    "url": "https://github.com/DanielTylerReece/Docket"
 }
