@@ -7,6 +7,6 @@
     "name": "Docket",
     "description": "Display Microsoft To Do and Todoist tasks next to the calendar in the GNOME Shell date menu.",
     "version": @EXTENSION_VERSION@,
-    "shell-version": [ "49" ],
+    "shell-version": [ "49", "50" ],
     "url": "https://github.com/DanielTylerReece/Docket"
 }
